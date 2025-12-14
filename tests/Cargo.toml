@@ -8,6 +8,6 @@ authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 name = "tests"
 
 [dependencies]
-pnet = "0.35.0"
-dns-lookup = "2.1.0"
-ipnetwork = "0.21.1"
+anyhow = { workspace = true }
+tokio = { workspace = true }
+netrun = { workspace = true }
