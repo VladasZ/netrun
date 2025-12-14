@@ -79,11 +79,7 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Server<T> {
 
 #[cfg(test)]
 mod test {
-    use std::{
-        net::{IpAddr, Ipv4Addr, SocketAddr},
-        ops::Deref,
-        time::Duration,
-    };
+    use std::{net::Ipv4Addr, ops::Deref, time::Duration};
 
     use anyhow::Result;
     use pretty_assertions::assert_eq;
@@ -114,11 +110,7 @@ mod test {
 
     async fn client() -> &'static Client<TestData> {
         CLIENT
-            .get_or_init(|| async {
-                Client::new(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 55443))
-                    .await
-                    .unwrap()
-            })
+            .get_or_init(|| async { Client::new((Ipv4Addr::LOCALHOST, 55443)).await.unwrap() })
             .await
     }
 
