@@ -7,6 +7,8 @@ lint:
       -W clippy::pedantic \
       \
       -A clippy::module_inception \
+      -A clippy::missing_errors_doc \
+      -A clippy::missing_panics_doc \
       \
       -D warnings
 

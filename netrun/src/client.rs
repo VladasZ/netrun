@@ -1,28 +1,27 @@
-use std::net::SocketAddr;
+use std::{fmt::Debug, ops::Deref};
 
 use anyhow::Result;
 use serde::{Serialize, de::DeserializeOwned};
-use serde_json::{from_str, to_string};
-use tarpc::{client, context, tokio_serde::formats::Json};
+use tokio::net::{TcpStream, ToSocketAddrs};
 
-use crate::channel_service::ChannelServiceClient;
+use crate::connection::Connection;
 
-pub struct Client {
-    addr: SocketAddr,
-    cl:   ChannelServiceClient,
+pub struct Client<T> {
+    connection: Connection<T>,
 }
 
-impl Client {
-    pub async fn new(addr: SocketAddr) -> Result<Self> {
-        let transport = tarpc::serde_transport::tcp::connect(addr, Json::default);
-
-        let cl = ChannelServiceClient::new(client::Config::default(), transport.await?).spawn();
-
-        Ok(Self { addr, cl })
+impl<T: Serialize + DeserializeOwned + Send + Debug> Client<T> {
+    pub async fn new(address: impl ToSocketAddrs) -> Result<Self> {
+        Ok(Self {
+            connection: Connection::new(TcpStream::connect(address).await?),
+        })
     }
+}
 
-    pub async fn send<In: Serialize, Out: DeserializeOwned>(&self, data: In) -> Result<Out> {
-        let response = self.cl.send_data(context::current(), to_string(&data)?).await?;
-        Ok(from_str(&response)?)
+impl<T> Deref for Client<T> {
+    type Target = Connection<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.connection
     }
 }
