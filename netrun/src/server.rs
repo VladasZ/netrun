@@ -1,9 +1,7 @@
-use std::{
-    fmt::Debug,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
+use log::warn;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     net::TcpListener,
@@ -13,14 +11,14 @@ use tokio::{
 
 use crate::connection::{Callback, Connection};
 
-pub struct Server<T> {
+pub struct Server<In, Out> {
     listener:   TcpListener,
-    connection: OnceCell<Connection<T>>,
+    connection: OnceCell<Connection<In, Out>>,
     started:    Mutex<bool>,
-    callback:   Mutex<Option<Callback<T>>>,
+    callback:   Mutex<Option<Callback<In>>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Send + Debug> Server<T> {
+impl<In: DeserializeOwned + Send, Out: Serialize + Send> Server<In, Out> {
     pub async fn new(port: u16) -> Result<Self> {
         let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)).await?;
 
@@ -59,7 +57,7 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Server<T> {
         *started = true;
     }
 
-    pub async fn on_receive(&'static self, action: impl FnMut(T) + Send + 'static) {
+    pub async fn on_receive(&'static self, action: impl FnMut(In) + Send + 'static) {
         let mut callback = self.callback.lock().await;
 
         assert!(callback.is_none(), "Already has callback");
@@ -67,8 +65,9 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Server<T> {
         callback.replace(Box::new(action));
     }
 
-    pub async fn send(&'static self, msg: impl Into<T>) -> Result<()> {
+    pub async fn send(&'static self, msg: impl Into<Out>) -> Result<()> {
         let Some(connection) = self.connection.get() else {
+            warn!("No connection");
             dbg!("No connection");
             return Ok(());
         };
@@ -98,17 +97,18 @@ mod test {
         b: String,
     }
 
-    static SERVER: OnceCell<Server<TestData>> = OnceCell::const_new();
+    static SERVER: OnceCell<Server<TestData, i32>> = OnceCell::const_new();
 
-    async fn server() -> &'static Server<TestData> {
+    async fn server() -> &'static Server<TestData, i32> {
         SERVER.get_or_init(|| async { Server::new(55443).await.unwrap() }).await
     }
 
-    static CLIENT: OnceCell<Client<TestData>> = OnceCell::const_new();
+    static CLIENT: OnceCell<Client<i32, TestData>> = OnceCell::const_new();
 
     static DATA: Mutex<Vec<TestData>> = Mutex::const_new(Vec::new());
+    static INTS: Mutex<Vec<i32>> = Mutex::const_new(Vec::new());
 
-    async fn client() -> &'static Client<TestData> {
+    async fn client() -> &'static Client<i32, TestData> {
         CLIENT
             .get_or_init(|| async { Client::new((Ipv4Addr::LOCALHOST, 55443)).await.unwrap() })
             .await
@@ -125,32 +125,20 @@ mod test {
 
         sv.start().await;
 
-        server()
-            .await
-            .send(TestData {
-                a: 555,
-                b: "aaaa".to_string(),
-            })
-            .await?;
+        server().await.send(1010).await?;
 
         let cl = client().await;
 
         cl.start().await;
 
         cl.on_receive(|msg| {
-            spawn(async { DATA.lock().await.push(msg) });
+            spawn(async move { INTS.lock().await.push(msg) });
         })
         .await;
 
         sleep(Duration::from_millis(100)).await;
 
-        server()
-            .await
-            .send(TestData {
-                a: 555,
-                b: "aaaa".to_string(),
-            })
-            .await?;
+        server().await.send(2020).await?;
 
         client()
             .await
@@ -170,14 +158,12 @@ mod test {
             })
             .await?;
 
-        sleep(Duration::from_millis(200)).await;
+        sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(&vec![2020], INTS.lock().await.deref());
 
         assert_eq!(
             &vec![
-                TestData {
-                    a: 555,
-                    b: "aaaa".to_string(),
-                },
                 TestData {
                     a: 666,
                     b: "aaaa".to_string(),

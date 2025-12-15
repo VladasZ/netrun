@@ -1,7 +1,6 @@
-use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use anyhow::Result;
-use log::info;
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -15,18 +14,20 @@ use tokio::{
 
 pub type Callback<T> = Box<dyn FnMut(T) + Send>;
 
-pub struct Connection<T> {
-    callback: Mutex<Option<Callback<T>>>,
+pub struct Connection<In, Out> {
+    callback: Mutex<Option<Callback<In>>>,
     stream:   Mutex<Option<TcpStream>>,
     write:    Mutex<Option<OwnedWriteHalf>>,
+    _p:       PhantomData<Mutex<Out>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Send + Debug> Connection<T> {
+impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
     pub fn new(stream: TcpStream) -> Self {
         Self {
             callback: Mutex::const_new(None),
             stream:   Mutex::new(Some(stream)),
             write:    Mutex::new(None),
+            _p:       PhantomData,
         }
     }
 
@@ -51,6 +52,7 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Connection<T> {
     pub async fn handle_read(&self, mut reader: OwnedReadHalf) -> Result<()> {
         loop {
             let mut buf = vec![0u8; 4096];
+
             let n = reader.read(&mut buf).await?;
 
             if n == 0 {
@@ -58,13 +60,12 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Connection<T> {
             }
 
             let json_str = std::str::from_utf8(&buf[..n])?;
-            let msg: T = serde_json::from_str(json_str)?;
-            info!("Received: {msg:?}");
+            let msg: In = serde_json::from_str(json_str)?;
             self.callback.lock().await.as_mut().unwrap()(msg);
         }
     }
 
-    pub async fn on_receive(&'static self, action: impl FnMut(T) + Send + 'static) -> &'static Self {
+    pub async fn on_receive(&'static self, action: impl FnMut(In) + Send + 'static) -> &'static Self {
         let mut callback = self.callback.lock().await;
 
         assert!(callback.is_none(), "Already has callback");
@@ -74,7 +75,7 @@ impl<T: Serialize + DeserializeOwned + Send + Debug> Connection<T> {
         self
     }
 
-    pub async fn send(&'static self, msg: impl Into<T>) -> Result<()> {
+    pub async fn send(&'static self, msg: impl Into<Out>) -> Result<()> {
         let msg = msg.into();
 
         let json = serde_json::to_string(&msg)?;
@@ -94,5 +95,5 @@ mod test {
 
     use crate::connection::Connection;
 
-    static _CONNECTION: OnceCell<Connection<i32>> = OnceCell::const_new();
+    static _CONNECTION: OnceCell<Connection<i32, i32>> = OnceCell::const_new();
 }
