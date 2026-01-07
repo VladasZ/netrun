@@ -1,5 +1,6 @@
 mod client;
 mod connection;
+pub mod rest;
 mod server;
 
 pub use client::Client;

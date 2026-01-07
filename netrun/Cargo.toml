@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
@@ -19,6 +19,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
