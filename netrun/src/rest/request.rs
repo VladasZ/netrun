@@ -149,9 +149,15 @@ fn to_body<Param: Serialize>(param: impl Borrow<Param>) -> Result<Option<String>
     Ok(if body == "null" { None } else { Some(body) })
 }
 
+#[cfg(target_arch = "wasm32")]
+type RequestFuture<T> = std::pin::Pin<Box<dyn Future<Output = T>>>;
+
+#[cfg(not(target_arch = "wasm32"))]
+type RequestFuture<T> = std::pin::Pin<Box<dyn Future<Output = T> + Send>>;
+
 impl<Out: DeserializeOwned + 'static> IntoFuture for Request<(), Out> {
     type Output = Result<Out>;
-    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = Self::Output>>>;
+    type IntoFuture = RequestFuture<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move { self.send(()).await })
