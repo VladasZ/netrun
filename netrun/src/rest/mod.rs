@@ -36,7 +36,7 @@ mod test {
         async fn test_rest() -> Result<()> {
             RestAPI::init("https://jsonplaceholder.typicode.com/");
 
-            let users = USERS.send(()).await?;
+            let users = USERS.await?;
 
             assert_eq!(users.len(), 10);
 
@@ -63,7 +63,7 @@ mod test {
             wasm_bindgen_test::console_log!("Hello");
 
             hreads::spawn(async {
-                let users = USERS.send(()).await.unwrap();
+                let users = USERS.await.unwrap();
 
                 wasm_bindgen_test::console_log!("Users: {}", users.len());
 

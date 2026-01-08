@@ -149,12 +149,11 @@ fn to_body<Param: Serialize>(param: impl Borrow<Param>) -> Result<Option<String>
     Ok(if body == "null" { None } else { Some(body) })
 }
 
-// impl<Out: DeserializeOwned + 'static> IntoFuture for Request<(), Out> {
-//     type Output = Result<Out>;
-//     type IntoFuture = std::pin::Pin<Box<dyn Future<Output = Self::Output> +
-// Send>>;
-//
-//     fn into_future(self) -> Self::IntoFuture {
-//         Box::pin(async move { self.send(()).await })
-//     }
-// }
+impl<Out: DeserializeOwned + 'static> IntoFuture for Request<(), Out> {
+    type Output = Result<Out>;
+    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = Self::Output>>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move { self.send(()).await })
+    }
+}
