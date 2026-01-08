@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    sync::{Mutex, OnceLock},
-};
+use std::{collections::HashMap, fmt::Display, sync::OnceLock};
+
+use parking_lot::Mutex;
 
 static STATIC_API: OnceLock<RestAPI> = OnceLock::new();
 
@@ -39,19 +37,19 @@ impl RestAPI {
     }
 
     pub fn headers() -> HashMap<String, String> {
-        Self::get().headers.lock().unwrap().clone()
+        Self::get().headers.lock().clone()
     }
 
     pub fn remove_header(key: impl ToString) {
-        Self::get().headers.lock().unwrap().remove(&key.to_string());
+        Self::get().headers.lock().remove(&key.to_string());
     }
 
     pub fn clear_all_headers() {
-        Self::get().headers.lock().unwrap().clear();
+        Self::get().headers.lock().clear();
     }
 
     pub fn add_header(key: impl ToString, value: impl ToString) {
-        Self::get().headers.lock().unwrap().insert(key.to_string(), value.to_string());
+        Self::get().headers.lock().insert(key.to_string(), value.to_string());
     }
 
     pub fn set_access_token(token: impl ToString) {

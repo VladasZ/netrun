@@ -6,6 +6,12 @@ pub enum Method {
     Post,
 }
 
+impl Method {
+    pub fn get(&self) -> bool {
+        matches!(self, Self::Get)
+    }
+}
+
 impl Display for Method {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let st = match self {

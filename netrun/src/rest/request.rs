@@ -1,6 +1,6 @@
 use std::{any::type_name, borrow::Borrow, collections::HashMap, marker::PhantomData};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use log::{debug, error};
 use reqwest::Client;
 use serde::{Serialize, de::DeserializeOwned};
@@ -9,20 +9,20 @@ use serde_json::{from_str, to_string};
 use crate::rest::{Method, Response, RestAPI};
 
 #[derive(Debug)]
-pub struct Request<In: Serialize + DeserializeOwned, Out: DeserializeOwned> {
+pub struct Request<In: Serialize, Out: DeserializeOwned> {
     pub name: &'static str,
     _p:       PhantomData<fn(In) -> Out>,
 }
 
-impl<In: Serialize + DeserializeOwned, Out: DeserializeOwned> Clone for Request<In, Out> {
+impl<In: Serialize, Out: DeserializeOwned> Clone for Request<In, Out> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<In: Serialize + DeserializeOwned, Out: DeserializeOwned> Copy for Request<In, Out> {}
+impl<In: Serialize, Out: DeserializeOwned> Copy for Request<In, Out> {}
 
-impl<In: Serialize + DeserializeOwned, Out: DeserializeOwned> Request<In, Out> {
+impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
     pub const fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -39,19 +39,17 @@ impl<In: Serialize + DeserializeOwned, Out: DeserializeOwned> Request<In, Out> {
     }
 }
 
-impl<Param: Serialize + DeserializeOwned, Output: DeserializeOwned> Request<Param, Output> {
+impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
     pub async fn send(&self, param: impl Borrow<Param>) -> Result<Output> {
-        let body = to_string(param.borrow())?;
-        request_object(Method::Get, self.full_url(), &RestAPI::headers(), body.into()).await
+        request_object(Method::Get, self.full_url(), &RestAPI::headers(), to_body(param)?).await
     }
 
     pub async fn with_token(&self, param: impl Borrow<Param>, token: impl ToString) -> Result<Output> {
-        let body = to_string(param.borrow())?;
         request_object(
             Method::Get,
             self.full_url(),
             &[("token".to_string(), token.to_string())].into(),
-            body.into(),
+            to_body(param)?,
         )
         .await
     }
@@ -62,6 +60,7 @@ impl<Param: Serialize + DeserializeOwned, Output: DeserializeOwned> Request<Para
         headers: impl Into<HashMap<String, String>>,
     ) -> Result<Output> {
         let body = to_string(param.borrow())?;
+
         request_object(Method::Get, self.full_url(), &headers.into(), body.into()).await
     }
 }
@@ -107,6 +106,12 @@ pub async fn raw_request(
     let url = url.to_string();
     let client = Client::new();
 
+    debug!("Request: {url} - {method}. Body: {body:?}");
+
+    if method.get() && body.is_some() {
+        bail!("GET method can not have body");
+    }
+
     let mut request = match method {
         Method::Get => client.get(&url),
         Method::Post => client.post(&url),
@@ -123,10 +128,8 @@ pub async fn raw_request(
         None => request,
     };
 
-    debug!("Request: {url} - {method} {body:?}");
-
     let response = request.send().await.map_err(|e| {
-        error!("Failed to send request: {e}");
+        error!("Failed to send request: {e:?}");
         e
     })?;
 
@@ -140,11 +143,18 @@ pub async fn raw_request(
     Ok(response)
 }
 
-impl<Out: DeserializeOwned + 'static> IntoFuture for Request<(), Out> {
-    type Output = Result<Out>;
-    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = Self::Output> + Send>>;
+fn to_body<Param: Serialize>(param: impl Borrow<Param>) -> Result<Option<String>> {
+    let body = to_string(param.borrow())?;
 
-    fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move { self.send(()).await })
-    }
+    Ok(if body == "null" { None } else { Some(body) })
 }
+
+// impl<Out: DeserializeOwned + 'static> IntoFuture for Request<(), Out> {
+//     type Output = Result<Out>;
+//     type IntoFuture = std::pin::Pin<Box<dyn Future<Output = Self::Output> +
+// Send>>;
+//
+//     fn into_future(self) -> Self::IntoFuture {
+//         Box::pin(async move { self.send(()).await })
+//     }
+// }

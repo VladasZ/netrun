@@ -89,7 +89,7 @@ mod test {
         time::sleep,
     };
 
-    use crate::{client::Client, server::Server};
+    use crate::{Client, Server};
 
     #[derive(Serialize, Deserialize, Debug, PartialEq)]
     struct TestData {

@@ -14,5 +14,9 @@ serde_json = "1.0"
 log = "0.4"
 pretty_assertions = "1.4"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+hreads = "0.9"
+plat = "0.5"
+wasm-bindgen-test = "0.3"
+parking_lot = "0.12"
 
 netrun = { path = "netrun" }

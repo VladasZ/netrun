@@ -18,3 +18,8 @@ lint:
 test:
 	cargo test --all
 	cargo test --all --release
+	make test-wasm
+
+test-wasm:
+	cargo install wasm-pack
+	cd netrun && wasm-pack test --firefox --headless
