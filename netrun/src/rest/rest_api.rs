@@ -17,7 +17,17 @@ impl RestAPI {
                 base_url: format!("{base_url}"),
                 headers:  Mutex::default(),
             })
-            .inspect_err(|err| log::error!("err: {err:?}"));
+            .inspect_err(|_| {
+                log::warn!("Double init of RestAPI");
+                let url = format!("{base_url}");
+                if url != Self::base_url() {
+                    panic!(
+                        "Initialization of RestAPI with different base URL is not supported. Was: {}, new: \
+                         {url}",
+                        Self::base_url()
+                    )
+                }
+            });
 
         Self::clear_all_headers();
     }

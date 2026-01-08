@@ -11,6 +11,7 @@ lint:
       -A clippy::missing_panics_doc \
       -A clippy::needless_pass_by_value \
       -A clippy::must_use_candidate \
+      -A clippy::manual_assert \
       \
       -D warnings
 

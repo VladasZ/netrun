@@ -26,6 +26,21 @@ mod test {
 
     static USERS: Request<(), Vec<User>> = Request::new("users");
 
+    #[test]
+    fn test_double_init() {
+        RestAPI::init("https://jsonplaceholder.typicode.com/");
+        RestAPI::init("https://jsonplaceholder.typicode.com/");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Initialization of RestAPI with different base URL is not supported. Was: https://jsonplaceholder.typicode.com/, new: a.com"
+    )]
+    fn test_invalid_double_init() {
+        RestAPI::init("https://jsonplaceholder.typicode.com/");
+        RestAPI::init("a.com");
+    }
+
     #[cfg(not_wasm)]
     mod not_wasm_test {
         use pretty_assertions::assert_eq;
