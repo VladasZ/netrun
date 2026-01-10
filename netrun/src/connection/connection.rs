@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -11,6 +11,8 @@ use tokio::{
     spawn,
     sync::Mutex,
 };
+
+pub const MAX_DATA_SIZE: usize = 8192;
 
 pub type Callback<T> = Box<dyn FnMut(T) + Send>;
 
@@ -51,7 +53,7 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
 
     pub async fn handle_read(&self, mut reader: OwnedReadHalf) -> Result<()> {
         loop {
-            let mut buf = vec![0u8; 4096];
+            let mut buf = vec![0u8; MAX_DATA_SIZE];
 
             let n = reader.read(&mut buf).await?;
 
@@ -78,6 +80,13 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
         let msg = msg.into();
 
         let data = bitcode::serialize(&msg)?;
+
+        if data.len() > MAX_DATA_SIZE {
+            bail!(
+                "Sending data is too large. Max: {MAX_DATA_SIZE}, Got: {}",
+                data.len()
+            );
+        }
 
         let mut writer = self.write.lock().await;
         let writer = writer.as_mut().expect("No writer. Did you start the connection?");
