@@ -59,8 +59,7 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
                 continue;
             }
 
-            let json_str = std::str::from_utf8(&buf[..n])?;
-            let msg: In = serde_json::from_str(json_str)?;
+            let msg: In = bitcode::deserialize(&buf[..n])?;
             self.callback.lock().await.as_mut().unwrap()(msg);
         }
     }
@@ -78,12 +77,12 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
     pub async fn send(&'static self, msg: impl Into<Out>) -> Result<()> {
         let msg = msg.into();
 
-        let json = serde_json::to_string(&msg)?;
+        let data = bitcode::serialize(&msg)?;
 
         let mut writer = self.write.lock().await;
         let writer = writer.as_mut().expect("No writer. Did you start the connection?");
 
-        writer.write_all(json.as_bytes()).await?;
+        writer.write_all(&data).await?;
 
         Ok(())
     }
