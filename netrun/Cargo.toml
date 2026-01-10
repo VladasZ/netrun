@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
@@ -20,7 +20,6 @@ serde_json = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
 reqwest = { workspace = true }
-bitcode = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }

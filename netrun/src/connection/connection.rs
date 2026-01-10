@@ -53,7 +53,7 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
 
     pub async fn handle_read(&self, mut reader: OwnedReadHalf) -> Result<()> {
         loop {
-            let mut buf = vec![0u8; MAX_DATA_SIZE];
+            let mut buf = vec![0u8; 4096];
 
             let n = reader.read(&mut buf).await?;
 
@@ -61,7 +61,8 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
                 continue;
             }
 
-            let msg: In = bitcode::deserialize(&buf[..n])?;
+            let json_str = std::str::from_utf8(&buf[..n])?;
+            let msg: In = serde_json::from_str(json_str)?;
             self.callback.lock().await.as_mut().unwrap()(msg);
         }
     }
@@ -79,19 +80,19 @@ impl<In: DeserializeOwned + Send, Out: Serialize + Send> Connection<In, Out> {
     pub async fn send(&'static self, msg: impl Into<Out>) -> Result<()> {
         let msg = msg.into();
 
-        let data = bitcode::serialize(&msg)?;
+        let json = serde_json::to_string(&msg)?;
 
-        if data.len() > MAX_DATA_SIZE {
+        if json.len() > MAX_DATA_SIZE {
             bail!(
                 "Sending data is too large. Max: {MAX_DATA_SIZE}, Got: {}",
-                data.len()
+                json.len()
             );
         }
 
         let mut writer = self.write.lock().await;
         let writer = writer.as_mut().expect("No writer. Did you start the connection?");
 
-        writer.write_all(&data).await?;
+        writer.write_all(json.as_bytes()).await?;
 
         Ok(())
     }
