@@ -48,9 +48,9 @@ mod test {
 
     use crate::secret::SecretsManager;
 
-    static SECRETS: OnceCell<SecretsManager> = OnceCell::const_new();
-
     async fn secrets() -> Result<&'static SecretsManager> {
+        static SECRETS: OnceCell<SecretsManager> = OnceCell::const_new();
+
         SECRETS
             .get_or_try_init(|| async {
                 let client_secret = var("INFISICAL_NETRUN").context("INFISICAL_NETRUN")?;
@@ -68,6 +68,7 @@ mod test {
             })
             .await
     }
+
     #[tokio::test]
     async fn test_secret() -> Result<()> {
         dotenvy::dotenv()?;
