@@ -18,5 +18,7 @@ hreads = "0.10"
 plat = "0.5"
 wasm-bindgen-test = "0.3"
 parking_lot = "0.12"
+infisical = "0.0.3"
+dotenvy = "0.15"
 
 netrun = { path = "netrun" }
