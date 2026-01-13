@@ -20,5 +20,6 @@ wasm-bindgen-test = "0.3"
 parking_lot = "0.12"
 infisical = "0.0.3"
 dotenvy = "0.15"
+tokio-util = "0.7"
 
 netrun = { path = "netrun" }

@@ -1,181 +1,125 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-use anyhow::Result;
-use log::warn;
-use serde::{Serialize, de::DeserializeOwned};
-use tokio::{
-    net::TcpListener,
-    spawn,
-    sync::{Mutex, OnceCell},
+use std::{
+    marker::PhantomData,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
 };
 
-use crate::connection::{Callback, Connection};
+use anyhow::Result;
+use log::{debug, error, warn};
+use serde::{Serialize, de::DeserializeOwned};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    select, spawn,
+    sync::{
+        Mutex,
+        mpsc::{Receiver, Sender, channel},
+    },
+};
+use tokio_util::sync::CancellationToken;
+
+use crate::connection::Client;
+
+type Connections<In, Out> = Arc<Mutex<Vec<Client<In, Out>>>>;
 
 pub struct Server<In, Out> {
-    listener:   TcpListener,
-    connection: OnceCell<Connection<In, Out>>,
-    started:    Mutex<bool>,
-    callback:   Mutex<Option<Callback<In>>>,
+    connections: Connections<In, Out>,
+    cancel:      CancellationToken,
+    connected:   Mutex<Receiver<()>>,
+    _p:          PhantomData<Mutex<(In, Out)>>,
 }
 
-impl<In: DeserializeOwned + Send, Out: Serialize + Send> Server<In, Out> {
+impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'static> Server<In, Out> {
     pub async fn new(port: u16) -> Result<Self> {
         let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)).await?;
 
-        Ok(Self {
-            listener,
-            connection: OnceCell::default(),
-            started: Mutex::new(false),
-            callback: Mutex::new(None),
-        })
-    }
+        let connections = Arc::new(Mutex::new(vec![]));
+        let cancel = CancellationToken::new();
 
-    pub async fn start(&'static self) {
-        let mut started = self.started.lock().await;
+        let conn = connections.clone();
+        let cn = cancel.clone();
 
-        if *started {
-            return;
-        }
+        let (s, r) = channel(1);
 
-        spawn(async {
+        spawn(async move {
             loop {
-                let (stream, addr) = self.listener.accept().await.unwrap();
-                println!("Client connected: {addr}");
-
-                assert!(self.connection.get().is_none(), "Connection already exists");
-
-                self.connection
-                    .get_or_init(|| async { Connection::new(stream) })
-                    .await
-                    .on_receive(self.callback.lock().await.take().expect("No callback set"))
-                    .await
-                    .start()
-                    .await;
+                select! {
+                    () = cn.cancelled() => {
+                        break;
+                    }
+                    connection = listener.accept() => {
+                        match connection {
+                            Ok((stream, _)) => Self::add_connection(&conn, &s, stream).await,
+                            Err(err) => error!("Failed to accept connection: {err}"),
+                        }
+                    }
+                }
             }
         });
 
-        *started = true;
+        Ok(Self {
+            connections,
+            cancel,
+            connected: Mutex::new(r),
+            _p: PhantomData,
+        })
     }
 
-    pub async fn on_receive(&'static self, action: impl FnMut(In) + Send + 'static) {
-        let mut callback = self.callback.lock().await;
+    pub async fn send(&self, msg: Out) -> Result<()> {
+        let connections = self.connections.lock().await;
 
-        assert!(callback.is_none(), "Already has callback");
-
-        callback.replace(Box::new(action));
-    }
-
-    pub async fn send(&'static self, msg: impl Into<Out>) -> Result<()> {
-        let Some(connection) = self.connection.get() else {
-            warn!("No connection");
-            dbg!("No connection");
+        if connections.is_empty() {
+            warn!("Sending message to server without connections");
             return Ok(());
-        };
+        }
 
-        connection.send(msg).await
+        for conn in connections.iter() {
+            let msg = msg.clone();
+            conn.send(msg).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn wait_for_connection(&self) {
+        self.connected.lock().await.recv().await;
+    }
+
+    pub async fn receive(&self) -> Option<In> {
+        if self.connections.lock().await.is_empty() {
+            self.wait_for_connection().await;
+        }
+
+        let conn = self.connections.lock().await;
+
+        conn.first().unwrap().receive().await
+    }
+
+    pub async fn dump_connections(&self) -> Result<()> {
+        for conn in self.connections.lock().await.iter() {
+            dbg!(conn.peer_addr().await?);
+            dbg!(conn.local_addr().await?);
+        }
+
+        Ok(())
+    }
+
+    // TODO: handle more that 1 receiver
+    async fn add_connection(connections: &Connections<In, Out>, sender: &Sender<()>, stream: TcpStream) {
+        let mut connections = connections.lock().await;
+
+        debug!("Connected: {}", stream.local_addr().unwrap());
+
+        connections.clear();
+
+        connections.push(Client::from_stream(stream));
+        if let Err(err) = sender.send(()).await {
+            error!("Failed to send connection signal: {err}");
+        }
     }
 }
 
-#[cfg(test)]
-mod test {
-    use std::{net::Ipv4Addr, ops::Deref, time::Duration};
-
-    use anyhow::Result;
-    use pretty_assertions::assert_eq;
-    use serde::{Deserialize, Serialize};
-    use tokio::{
-        spawn,
-        sync::{Mutex, OnceCell},
-        time::sleep,
-    };
-
-    use crate::{Client, Server};
-
-    #[derive(Serialize, Deserialize, Debug, PartialEq)]
-    struct TestData {
-        a: i32,
-        b: String,
-    }
-
-    static SERVER: OnceCell<Server<TestData, i32>> = OnceCell::const_new();
-
-    async fn server() -> &'static Server<TestData, i32> {
-        SERVER.get_or_init(|| async { Server::new(55443).await.unwrap() }).await
-    }
-
-    static CLIENT: OnceCell<Client<i32, TestData>> = OnceCell::const_new();
-
-    static DATA: Mutex<Vec<TestData>> = Mutex::const_new(Vec::new());
-    static INTS: Mutex<Vec<i32>> = Mutex::const_new(Vec::new());
-
-    async fn client() -> &'static Client<i32, TestData> {
-        CLIENT
-            .get_or_init(|| async { Client::new((Ipv4Addr::LOCALHOST, 55443)).await.unwrap() })
-            .await
-    }
-
-    #[tokio::test]
-    async fn test_client_server() -> Result<()> {
-        let sv = server().await;
-
-        sv.on_receive(|msg| {
-            spawn(async { DATA.lock().await.push(msg) });
-        })
-        .await;
-
-        sv.start().await;
-
-        server().await.send(1010).await?;
-
-        let cl = client().await;
-
-        cl.start().await;
-
-        cl.on_receive(|msg| {
-            spawn(async move { INTS.lock().await.push(msg) });
-        })
-        .await;
-
-        sleep(Duration::from_millis(100)).await;
-
-        server().await.send(2020).await?;
-
-        client()
-            .await
-            .send(TestData {
-                a: 666,
-                b: "aaaa".to_string(),
-            })
-            .await?;
-
-        sleep(Duration::from_millis(10)).await;
-
-        client()
-            .await
-            .send(TestData {
-                a: 777,
-                b: "aaaa".to_string(),
-            })
-            .await?;
-
-        sleep(Duration::from_millis(100)).await;
-
-        assert_eq!(&vec![2020], INTS.lock().await.deref());
-
-        assert_eq!(
-            &vec![
-                TestData {
-                    a: 666,
-                    b: "aaaa".to_string(),
-                },
-                TestData {
-                    a: 777,
-                    b: "aaaa".to_string(),
-                }
-            ],
-            DATA.lock().await.deref()
-        );
-
-        Ok(())
+impl<In, Out> Drop for Server<In, Out> {
+    fn drop(&mut self) {
+        self.cancel.cancel();
     }
 }

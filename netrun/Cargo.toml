@@ -23,6 +23,7 @@ reqwest = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 infisical = { workspace = true }
 
 [dev-dependencies]
