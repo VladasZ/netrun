@@ -22,7 +22,7 @@ mod test {
 
         let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57777)).await?;
 
-        client.send(55).await?;
+        client.send(55u32).await?;
 
         assert_eq!(server.receive().await, Some(55));
 
@@ -36,7 +36,7 @@ mod test {
 
         sleep(Duration::from_secs_f32(0.1)).await;
 
-        client.send(55).await?;
+        client.send(55u32).await?;
 
         assert_eq!(server.receive().await, Some(55));
 

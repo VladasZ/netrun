@@ -58,7 +58,8 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
         }
     }
 
-    pub async fn send(&self, val: Out) -> Result<()> {
+    pub async fn send(&self, val: impl Into<Out>) -> Result<()> {
+        let val = val.into();
         let data = serialize(&val)?;
 
         self.write.lock().await.write_all(&data).await?;

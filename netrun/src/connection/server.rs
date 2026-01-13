@@ -64,7 +64,8 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
         })
     }
 
-    pub async fn send(&self, msg: Out) -> Result<()> {
+    pub async fn send(&self, msg: impl Into<Out>) -> Result<()> {
+        let msg = msg.into();
         let connections = self.connections.lock().await;
 
         if connections.is_empty() {

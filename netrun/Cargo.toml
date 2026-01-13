@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
