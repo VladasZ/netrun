@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
@@ -32,6 +32,8 @@ hreads = { workspace = true }
 pretty_assertions = { workspace = true }
 wasm-bindgen-test = { workspace = true }
 dotenvy = { workspace = true }
+env_logger = { workspace = true }
+test-log = { workspace = true }
 
 
 [build-dependencies]
