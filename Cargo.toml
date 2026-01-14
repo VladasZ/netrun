@@ -23,6 +23,8 @@ dotenvy = "0.15"
 tokio-util = "0.7"
 local-ip-address = "0.6"
 env_logger = "0.11"
-test-log = "0.2"
+test-log = { git = "https://github.com/VladasZ/test-log", rev = "0cd1a2aea94b5ab70d316485f8fbaf7a1979d129", features = [
+  "trace",
+] }
 
 netrun = { path = "netrun" }

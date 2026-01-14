@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
-use log::{error, info, warn};
+use log::{error, info, trace, warn};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -25,6 +25,7 @@ pub struct Server<In, Out> {
     connections: Connections<In, Out>,
     cancel:      CancellationToken,
     connected:   Mutex<Receiver<()>>,
+    reconnected: Mutex<Receiver<()>>,
     _p:          PhantomData<Mutex<(In, Out)>>,
 }
 
@@ -39,6 +40,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
         let cn = cancel.clone();
 
         let (s, r) = channel(1);
+        let (re_s, re_r) = channel(1);
 
         spawn(async move {
             loop {
@@ -48,7 +50,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
                     }
                     connection = listener.accept() => {
                         match connection {
-                            Ok((stream, _)) => Self::add_connection(&conn, &s, stream).await,
+                            Ok((stream, _)) => Self::add_connection(&conn, &s, &re_s, stream).await,
                             Err(err) => error!("Failed to accept connection: {err}"),
                         }
                     }
@@ -60,6 +62,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
             connections,
             cancel,
             connected: Mutex::new(r),
+            reconnected: Mutex::new(re_r),
             _p: PhantomData,
         })
     }
@@ -97,15 +100,32 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
 
     pub async fn receive(&self) -> In {
         loop {
+            trace!("Started receive loop");
+
             if self.connections.read().await.is_empty() {
+                trace!("Waiting for new connection");
                 self.wait_for_new_connection().await;
+                trace!("New connection");
             }
 
             let conns = self.connections.read().await;
             let conn = conns.first().unwrap();
 
-            if let Some(val) = conn.receive().await {
-                return val;
+            trace!("Waiting for receive");
+
+            let mut reconnect = self.reconnected.lock().await;
+
+            select! {
+                _ = reconnect.recv() => {
+                    trace!("Received reconnected signal");
+                    continue;
+                }
+                val = conn.receive() => {
+                    if let Some(val) = val {
+                        trace!("Return val");
+                        return val;
+                    }
+                }
             }
 
             info!("Removing failed connection from server.");
@@ -113,6 +133,8 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
             drop(conns);
 
             self.connections.write().await.clear();
+
+            info!("Removed failed connection.");
         }
     }
 
@@ -129,7 +151,21 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
     }
 
     // TODO: handle more that 1 receiver
-    async fn add_connection(connections: &Connections<In, Out>, sender: &Sender<()>, stream: TcpStream) {
+    async fn add_connection(
+        connections: &Connections<In, Out>,
+        new_connection: &Sender<()>,
+        reconnected: &Sender<()>,
+        stream: TcpStream,
+    ) {
+        trace!("Adding connection");
+
+        if !connections.read().await.is_empty() {
+            trace!("Sending reconnected signal");
+            if let Err(err) = reconnected.send(()).await {
+                error!("Failed to send reconnected signal: {err}");
+            }
+        }
+
         let mut connections = connections.write().await;
 
         info!("Connected: {}", stream.local_addr().unwrap());
@@ -137,7 +173,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
         connections.clear();
 
         connections.push(Client::from_stream(stream));
-        if let Err(err) = sender.send(()).await {
+        if let Err(err) = new_connection.send(()).await {
             error!("Failed to send connection signal: {err}");
         }
     }

@@ -13,6 +13,7 @@ mod test {
 
     use anyhow::Result;
     use pretty_assertions::assert_eq;
+    use test_log::test;
     use tokio::{
         spawn,
         sync::{Mutex, OnceCell},
@@ -32,8 +33,8 @@ mod test {
             .await
     }
 
-    #[test_log::test(tokio::test)]
-    async fn test_connection() -> Result<()> {
+    #[test(tokio::test)]
+    async fn test_connection_and_reconnection() -> Result<()> {
         let data: Arc<Mutex<Vec<u32>>> = Arc::default();
 
         assert!(server().await?.connections().await?.is_empty());
@@ -61,7 +62,7 @@ mod test {
         assert_eq!(Some(0.0042), client.receive().await);
 
         client.send(55u32).await?;
-        sleep(Duration::from_secs_f32(0.5)).await;
+        sleep(Duration::from_secs_f32(0.6)).await;
         assert_eq!(vec![55], **data.lock().await);
 
         drop(client);
@@ -92,6 +93,56 @@ mod test {
         client.send(77u32).await?;
         sleep(Duration::from_secs_f32(0.5)).await;
         assert_eq!(vec![55, 77], **data.lock().await);
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn test_reset_on_double_connection() -> Result<()> {
+        async fn double_server() -> Result<&'static Server<u32, f32>> {
+            static SERVER: OnceCell<Server<u32, f32>> = OnceCell::const_new();
+
+            SERVER
+                .get_or_try_init(|| async {
+                    let s = Server::new(57778).await?;
+                    Ok(s)
+                })
+                .await
+        }
+
+        let data: Arc<Mutex<Vec<u32>>> = Arc::default();
+
+        assert!(double_server().await?.connections().await?.is_empty());
+
+        let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
+
+        let server_data = data.clone();
+        spawn(async move {
+            loop {
+                let val = double_server().await.unwrap().receive().await;
+                server_data.lock().await.push(val);
+            }
+        });
+
+        double_server().await?.wait_for_new_connection().await;
+
+        assert_eq!(client.peer_addr().await?, (Ipv4Addr::LOCALHOST, 57778).into());
+
+        assert_eq!(
+            *double_server().await?.connections().await?.first().unwrap(),
+            client.local_addr().await?
+        );
+
+        let client2: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
+
+        sleep(Duration::from_secs_f32(0.2)).await;
+
+        double_server().await?.send(0.0042).await?;
+        assert_eq!(Some(0.0042), client2.receive().await);
+
+        client2.send(77u32).await?;
+        sleep(Duration::from_secs_f32(0.5)).await;
+        assert_eq!(vec![77], **data.lock().await);
 
         Ok(())
     }
