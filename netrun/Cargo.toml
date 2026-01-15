@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.19.0"
+version = "0.20.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
@@ -26,6 +26,7 @@ local-ip-address = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 infisical = { workspace = true }
+rust-network-scanner = { workspace = true }
 
 [dev-dependencies]
 hreads = { workspace = true }
