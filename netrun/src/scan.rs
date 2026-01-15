@@ -8,12 +8,12 @@ use std::{
 };
 
 use anyhow::Result;
-use log::error;
+use log::{error, trace};
 use rust_network_scanner::{NetworkScanner, PortScanResult};
 use tokio::{
     spawn,
     sync::{Mutex, mpsc::channel},
-    time::{Duration, timeout},
+    time::Duration,
 };
 
 fn local_network() -> Vec<IpAddr> {
@@ -22,17 +22,28 @@ fn local_network() -> Vec<IpAddr> {
         .collect()
 }
 
-async fn check_port(ip: IpAddr, port: u16, scanner: &NetworkScanner) -> Result<Vec<PortScanResult>> {
-    let timeout_duration = Duration::from_millis(200);
+async fn check_port(
+    ip: IpAddr,
+    start: u16,
+    end: u16,
+    scanner: &NetworkScanner,
+    timeout: u64,
+) -> Result<Vec<PortScanResult>> {
+    let timeout_duration = Duration::from_millis(timeout);
 
-    let Ok(scan) = timeout(timeout_duration, scanner.scan_ports(ip, port, port)).await else {
+    let Ok(scan) = tokio::time::timeout(timeout_duration, scanner.scan_ports(ip, start, end)).await else {
+        trace!("Timeout: {ip}");
         return Ok(vec![]);
     };
 
     Ok(scan?.open_ports)
 }
 
-pub async fn scan_for_port(port: u16) -> Result<Vec<(IpAddr, Vec<PortScanResult>)>> {
+pub async fn scan_for_port_range(
+    start: u16,
+    end: u16,
+    timeout: u64,
+) -> Result<Vec<(IpAddr, Vec<PortScanResult>)>> {
     let local = local_network();
 
     let result = Arc::new(Mutex::new(vec![]));
@@ -46,9 +57,11 @@ pub async fn scan_for_port(port: u16) -> Result<Vec<(IpAddr, Vec<PortScanResult>
         let ss = s.clone();
         let res = result.clone();
         spawn(async move {
+            trace!("Scanning: {ip}");
+
             let scanner = NetworkScanner::new();
 
-            let open_ports = check_port(ip, port, &scanner)
+            let open_ports = check_port(ip, start, end, &scanner, timeout)
                 .await
                 .inspect_err(|err| error!("Failed to check port: {err}"))
                 .unwrap();
@@ -68,6 +81,10 @@ pub async fn scan_for_port(port: u16) -> Result<Vec<(IpAddr, Vec<PortScanResult>
     let result = Arc::try_unwrap(result).expect("Failed to extract port results from Arc");
 
     Ok(result.into_inner())
+}
+
+pub async fn scan_for_port(port: u16) -> Result<Vec<(IpAddr, Vec<PortScanResult>)>> {
+    scan_for_port_range(port, port, 500).await
 }
 
 #[cfg(test)]
@@ -98,6 +115,14 @@ mod test {
     #[test(tokio::test)]
     async fn find() -> Result<()> {
         dbg!(scan_for_port(55400).await?);
+
+        Ok(())
+    }
+
+    #[ignore]
+    #[test(tokio::test)]
+    async fn full_scan() -> Result<()> {
+        dbg!(scan_for_port_range(10000, 15000, 2_000_000).await?);
 
         Ok(())
     }
