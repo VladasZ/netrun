@@ -93,4 +93,12 @@ mod test {
 
         Ok(())
     }
+
+    #[ignore]
+    #[test(tokio::test)]
+    async fn find() -> Result<()> {
+        dbg!(scan_for_port(55400).await?);
+
+        Ok(())
+    }
 }
