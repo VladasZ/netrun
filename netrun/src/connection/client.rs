@@ -2,7 +2,7 @@ use core::net::SocketAddr;
 use std::marker::PhantomData;
 
 use anyhow::Result;
-use log::{error, info};
+use log::{debug, error};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -15,9 +15,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::connection::{
-    BUFFER_SIZE,
-    serde::{deserialize, serialize},
+use crate::{
+    System,
+    connection::{
+        BUFFER_SIZE,
+        serde::{deserialize, serialize},
+    },
 };
 
 pub struct Client<In, Out> {
@@ -33,25 +36,30 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
     }
 
     pub fn from_stream(stream: TcpStream) -> Self {
+        let addr = stream.local_addr().expect("Failed to get stream local_addr");
+        let id = System::generate_app_instance_id();
         let cancel = CancellationToken::new();
 
         let (s, r) = channel::<Option<In>>(1);
         let (mut read, write) = stream.into_split();
         let cn = cancel.clone();
 
+        let idd = id.clone();
         spawn(async move {
             let mut buf = vec![0u8; BUFFER_SIZE];
 
             loop {
                 select! {
                     () = cn.cancelled() => {
-                        info!("Client dropped. Stop listening.");
+                        debug!("Client dropped. Stop listening: {addr} - {idd}");
                         break
                     },
                     bytes = read.read(&mut buf) => handle_read(bytes, &buf, &s).await,
                 }
             }
         });
+
+        debug!("Connection: {id} created");
 
         Self {
             write: RwLock::new(write),

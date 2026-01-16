@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
-use log::{error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     net::{TcpListener, TcpStream},
@@ -86,7 +86,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
             {
                 let a = conn.peer_addr().await?;
 
-                info!("Broken pipe! Removing connection: {a}");
+                debug!("Broken pipe! Removing connection: {a}");
                 // trigger cleanup logic here
             }
         }
@@ -128,13 +128,13 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
                 }
             }
 
-            info!("Removing failed connection from server.");
+            debug!("Removing failed connection from server.");
 
             drop(conns);
 
             self.connections.write().await.clear();
 
-            info!("Removed failed connection.");
+            debug!("Removed failed connection.");
         }
     }
 
@@ -168,7 +168,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
 
         let mut connections = connections.write().await;
 
-        info!("Connected: {}", stream.local_addr().unwrap());
+        debug!("Connected: {}", stream.local_addr().unwrap());
 
         connections.clear();
 
