@@ -1,6 +1,6 @@
 [package]
 name = "netrun"
-version = "0.21.0"
+version = "0.22.0"
 edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
@@ -23,6 +23,7 @@ reqwest = { workspace = true }
 local-ip-address = { workspace = true }
 sysinfo = { workspace = true }
 byte-unit = { workspace = true }
+hreads = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
@@ -31,7 +32,6 @@ infisical = { workspace = true }
 rust-network-scanner = { workspace = true }
 
 [dev-dependencies]
-hreads = { workspace = true }
 pretty_assertions = { workspace = true }
 wasm-bindgen-test = { workspace = true }
 dotenvy = { workspace = true }

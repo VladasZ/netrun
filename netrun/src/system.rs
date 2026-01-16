@@ -1,4 +1,4 @@
-use byte_unit::Byte;
+use byte_unit::{Byte, rust_decimal::prelude::ToPrimitive};
 
 #[derive(Debug)]
 pub struct CPU {
@@ -24,6 +24,36 @@ pub struct System {
 }
 
 impl System {
+    #[allow(clippy::unreadable_literal)]
+    pub fn generate_app_instance_id() -> String {
+        let now = hreads::now().to_u64().unwrap();
+
+        // 1. Get a "system" value by taking a memory address of a local variable
+        // This address varies based on the WASM stack and memory allocation state.
+        let stack_ptr = &raw const now as usize as u64;
+
+        // 2. Mix the time and the memory address (Simple Xorshift)
+        // This creates a pseudo-random seed without any external crates
+        let mut seed = now ^ stack_ptr;
+
+        // A few rounds of mixing to spread the entropy
+        seed = seed.wrapping_mul(0x517cc1b727220a95);
+        seed ^= seed >> 31;
+
+        // 3. Generate 5 lowercase letters (a-z)
+        let mut result = String::with_capacity(5);
+        for _ in 0..6 {
+            // Advance the seed
+            seed = seed.wrapping_mul(0x6364136223846793).wrapping_add(1);
+
+            // Map to 'a' through 'z' (ASCII 97-122)
+            let letter = ((seed % 26) as u8 + b'A') as char;
+            result.push(letter);
+        }
+
+        result
+    }
+
     pub fn get_info() -> Self {
         let mut sys = sysinfo::System::new_all();
 
@@ -90,5 +120,10 @@ mod test {
     #[wasm_bindgen_test(unsupported = test)]
     fn test_sysinfo() {
         println!("{}", System::get_info().dump());
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn test_app_id() {
+        println!("{}", System::generate_app_instance_id());
     }
 }
