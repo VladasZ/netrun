@@ -16,7 +16,7 @@ mod test {
     use test_log::test;
     use tokio::{
         spawn,
-        sync::{Mutex, OnceCell},
+        sync::{Mutex, OnceCell, mpsc::channel},
         time::sleep,
     };
 
@@ -37,6 +37,8 @@ mod test {
     async fn test_connection_and_reconnection() -> Result<()> {
         let data: Arc<Mutex<Vec<u32>>> = Arc::default();
 
+        let (s, mut server_received) = channel::<()>(1);
+
         assert!(server().await?.connections().await?.is_empty());
 
         let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57777)).await?;
@@ -48,6 +50,7 @@ mod test {
             loop {
                 let val = server().await.unwrap().receive().await;
                 server_data.lock().await.push(val);
+                s.send(()).await.unwrap();
             }
         });
 
@@ -62,7 +65,9 @@ mod test {
         assert_eq!(Some(0.0042), client.receive().await);
 
         client.send(55u32).await?;
-        sleep(Duration::from_secs_f32(0.6)).await;
+
+        server_received.recv().await.unwrap();
+
         assert_eq!(vec![55], **data.lock().await);
 
         drop(client);
@@ -91,7 +96,7 @@ mod test {
         assert_eq!(Some(0.0042), client.receive().await);
 
         client.send(77u32).await?;
-        sleep(Duration::from_secs_f32(0.5)).await;
+        server_received.recv().await.unwrap();
         assert_eq!(vec![55, 77], **data.lock().await);
 
         Ok(())
@@ -109,6 +114,7 @@ mod test {
                 })
                 .await
         }
+        let (s, mut server_received) = channel::<()>(1);
 
         let data: Arc<Mutex<Vec<u32>>> = Arc::default();
 
@@ -121,6 +127,7 @@ mod test {
             loop {
                 let val = double_server().await.unwrap().receive().await;
                 server_data.lock().await.push(val);
+                s.send(()).await.unwrap();
             }
         });
 
@@ -141,7 +148,7 @@ mod test {
         assert_eq!(Some(0.0042), client2.receive().await);
 
         client2.send(77u32).await?;
-        sleep(Duration::from_secs_f32(0.5)).await;
+        server_received.recv().await.unwrap();
         assert_eq!(vec![77], **data.lock().await);
 
         Ok(())

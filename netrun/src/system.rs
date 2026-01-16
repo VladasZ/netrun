@@ -30,14 +30,16 @@ impl System {
     #[allow(clippy::unreadable_literal)]
     pub fn generate_app_instance_id() -> String {
         static CALL_COUNT: AtomicU64 = AtomicU64::new(0);
+        static CALL_COUNT2: AtomicU64 = AtomicU64::new(777);
 
         let now = u64::from_le_bytes(hreads::now().to_le_bytes());
 
         let stack_ptr = &raw const now as usize as u64;
 
-        let count = CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+        let count = CALL_COUNT.fetch_add(5, Ordering::AcqRel);
+        let count2 = CALL_COUNT2.fetch_add(555, Ordering::AcqRel);
 
-        let mut seed = now ^ stack_ptr ^ count;
+        let mut seed = now ^ stack_ptr ^ count ^ count2;
 
         seed = (seed ^ (seed >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
         seed = (seed ^ (seed >> 27)).wrapping_mul(0x94D049BB133111EB);
@@ -123,10 +125,11 @@ mod test {
 
     #[wasm_bindgen_test(unsupported = test)]
     fn test_app_id() {
-        for _ in 0..1000 {
+        for i in 0..100_000 {
             assert_ne!(
                 System::generate_app_instance_id(),
-                System::generate_app_instance_id()
+                System::generate_app_instance_id(),
+                "{i}"
             );
         }
 
