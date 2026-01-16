@@ -12,6 +12,7 @@ lint:
       -A clippy::needless_pass_by_value \
       -A clippy::must_use_candidate \
       -A clippy::manual_assert \
+      -A clippy::return_self_not_must_use \
       \
       -D warnings
 
