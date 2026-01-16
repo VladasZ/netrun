@@ -1,11 +1,5 @@
+use byte_unit::Byte;
 use sysinfo::System;
-
-#[derive(Debug)]
-pub struct Sys {
-    pub hostname: String,
-    pub cpu:      CPU,
-    pub memory:   Memory,
-}
 
 #[derive(Debug)]
 pub struct CPU {
@@ -20,6 +14,16 @@ pub struct Memory {
     pub available: u64,
 }
 
+#[derive(Debug)]
+pub struct Sys {
+    pub hostname:    String,
+    pub os:          String,
+    pub os_version:  String,
+    pub system_name: String,
+    pub cpu:         CPU,
+    pub memory:      Memory,
+}
+
 impl Sys {
     pub fn get_info() -> Self {
         let mut sys = System::new_all();
@@ -32,18 +36,50 @@ impl Sys {
         let unknown = || "Unknown".to_string();
 
         Self {
-            hostname: System::host_name().unwrap_or_else(unknown),
-            cpu:      CPU {
+            hostname:    System::host_name().unwrap_or_else(unknown),
+            os:          System::name().unwrap_or_else(unknown),
+            os_version:  System::os_version().unwrap_or_else(unknown),
+            system_name: System::long_os_version().unwrap_or_else(unknown),
+            cpu:         CPU {
                 cores:          sys.cpus().len(),
                 physical_cores: sysinfo::System::physical_core_count().unwrap_or_default(),
             },
-            memory:   Memory {
+            memory:      Memory {
                 total:     sys.total_memory(),
                 free:      sys.free_memory(),
                 available: sys.available_memory(),
             },
         }
     }
+
+    pub fn dump(&self) -> String {
+        format!(
+            r"
+Hostname: {}
+OS: {} {}
+System: {}
+CPU cores: {}/{}
+Memory: total - {}, free - {}, available - {}
+        ",
+            self.hostname,
+            self.os,
+            self.os_version,
+            self.system_name,
+            self.cpu.cores,
+            self.cpu.physical_cores,
+            display_size(self.memory.total),
+            display_size(self.memory.free),
+            display_size(self.memory.available)
+        )
+    }
+}
+
+fn display_size(size: u64) -> String {
+    let bytes = Byte::from_u64(size);
+
+    let adjusted_byte = bytes.get_appropriate_unit(byte_unit::UnitType::Decimal);
+
+    format!("{adjusted_byte:.2}")
 }
 
 #[cfg(test)]
@@ -106,6 +142,6 @@ mod test {
             System::long_os_version().unwrap_or_else(|| "Unknown".into())
         );
 
-        dbg!(&Sys::get_info());
+        println!("{}", Sys::get_info().dump());
     }
 }
