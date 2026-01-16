@@ -1,19 +1,20 @@
 use byte_unit::{Byte, rust_decimal::prelude::ToPrimitive};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CPU {
     cores:          usize,
     physical_cores: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
     pub total:     u64,
     pub free:      u64,
     pub available: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct System {
     pub hostname:    String,
     pub os:          String,
