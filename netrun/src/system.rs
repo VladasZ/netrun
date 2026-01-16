@@ -1,5 +1,4 @@
 use byte_unit::Byte;
-use sysinfo::System;
 
 #[derive(Debug)]
 pub struct CPU {
@@ -15,7 +14,7 @@ pub struct Memory {
 }
 
 #[derive(Debug)]
-pub struct Sys {
+pub struct System {
     pub hostname:    String,
     pub os:          String,
     pub os_version:  String,
@@ -24,9 +23,9 @@ pub struct Sys {
     pub memory:      Memory,
 }
 
-impl Sys {
+impl System {
     pub fn get_info() -> Self {
-        let mut sys = System::new_all();
+        let mut sys = sysinfo::System::new_all();
 
         // First we update all information of our `System` struct.
         sys.refresh_all();
@@ -36,10 +35,10 @@ impl Sys {
         let unknown = || "Unknown".to_string();
 
         Self {
-            hostname:    System::host_name().unwrap_or_else(unknown),
-            os:          System::name().unwrap_or_else(unknown),
-            os_version:  System::os_version().unwrap_or_else(unknown),
-            system_name: System::long_os_version().unwrap_or_else(unknown),
+            hostname:    sysinfo::System::host_name().unwrap_or_else(unknown),
+            os:          sysinfo::System::name().unwrap_or_else(unknown),
+            os_version:  sysinfo::System::os_version().unwrap_or_else(unknown),
+            system_name: sysinfo::System::long_os_version().unwrap_or_else(unknown),
             cpu:         CPU {
                 cores:          sys.cpus().len(),
                 physical_cores: sysinfo::System::physical_core_count().unwrap_or_default(),
@@ -84,64 +83,12 @@ fn display_size(size: u64) -> String {
 
 #[cfg(test)]
 mod test {
-    use sysinfo::System;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    use crate::Sys;
+    use crate::System;
 
     #[wasm_bindgen_test(unsupported = test)]
     fn test_sysinfo() {
-        Sys::get_info();
-
-        let mut sys = System::new_all();
-        sys.refresh_all();
-
-        println!("--- Device Information ---");
-
-        // Hostname
-        println!(
-            "Hostname:          {:?}",
-            System::host_name().unwrap_or_else(|| "Unknown".into())
-        );
-
-        // OS Info
-        println!(
-            "OS Name:           {:?}",
-            System::name().unwrap_or_else(|| "Unknown".into())
-        );
-        println!(
-            "OS Version:        {:?}",
-            System::os_version().unwrap_or_else(|| "Unknown".into())
-        );
-        println!(
-            "Kernel Version:    {:?}",
-            System::kernel_version().unwrap_or_else(|| "Unknown".into())
-        );
-
-        // CPU Info
-        // physical_core_count gives actual hardware cores
-        println!("Total CPUs:        {}", sys.cpus().len());
-        if let Some(cores) = sysinfo::System::physical_core_count() {
-            println!("Physical Cores:    {}", cores);
-        }
-
-        // RAM Info (Returned in bytes, converting to GB)
-        let total_ram = sys.total_memory();
-        println!(
-            "Total RAM:         {:.2} GB",
-            total_ram as f64 / 1024.0 / 1024.0 / 1024.0
-        );
-        println!(
-            "Used RAM:          {:.2} GB",
-            sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0
-        );
-
-        // Device Name (Note: on some OSs this is the same as hostname)
-        println!(
-            "System Name:       {:?}",
-            System::long_os_version().unwrap_or_else(|| "Unknown".into())
-        );
-
-        println!("{}", Sys::get_info().dump());
+        println!("{}", System::get_info().dump());
     }
 }
