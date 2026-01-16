@@ -1,15 +1,48 @@
 use sysinfo::System;
 
-pub struct Sys {}
+#[derive(Debug)]
+pub struct Sys {
+    pub hostname: String,
+    pub cpu:      CPU,
+    pub memory:   Memory,
+}
+
+#[derive(Debug)]
+pub struct CPU {
+    cores:          usize,
+    physical_cores: usize,
+}
+
+#[derive(Debug)]
+pub struct Memory {
+    pub total:     u64,
+    pub free:      u64,
+    pub available: u64,
+}
 
 impl Sys {
-    pub fn get_info() {
+    pub fn get_info() -> Self {
         let mut sys = System::new_all();
 
         // First we update all information of our `System` struct.
         sys.refresh_all();
 
         dbg!(&sys);
+
+        let unknown = || "Unknown".to_string();
+
+        Self {
+            hostname: System::host_name().unwrap_or_else(unknown),
+            cpu:      CPU {
+                cores:          sys.cpus().len(),
+                physical_cores: sysinfo::System::physical_core_count().unwrap_or_default(),
+            },
+            memory:   Memory {
+                total:     sys.total_memory(),
+                free:      sys.free_memory(),
+                available: sys.available_memory(),
+            },
+        }
     }
 }
 
@@ -72,5 +105,7 @@ mod test {
             "System Name:       {:?}",
             System::long_os_version().unwrap_or_else(|| "Unknown".into())
         );
+
+        dbg!(&Sys::get_info());
     }
 }
