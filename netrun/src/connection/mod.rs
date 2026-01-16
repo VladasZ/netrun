@@ -9,21 +9,18 @@ pub use server::*;
 
 #[cfg(test)]
 mod test {
-    use std::{net::Ipv4Addr, sync::Arc, time::Duration};
+    use std::net::Ipv4Addr;
 
     use anyhow::Result;
     use pretty_assertions::assert_eq;
     use test_log::test;
-    use tokio::{
-        spawn,
-        sync::{Mutex, OnceCell, mpsc::channel},
-        time::sleep,
-    };
+    use tokio::{sync::OnceCell, task::JoinSet};
 
     use super::*;
+    use crate::Retry;
 
-    async fn server() -> Result<&'static Server<u32, f32>> {
-        static SERVER: OnceCell<Server<u32, f32>> = OnceCell::const_new();
+    async fn server() -> Result<&'static Server<i32, bool>> {
+        static SERVER: OnceCell<Server<i32, bool>> = OnceCell::const_new();
 
         SERVER
             .get_or_try_init(|| async {
@@ -34,122 +31,89 @@ mod test {
     }
 
     #[test(tokio::test)]
-    async fn test_connection_and_reconnection() -> Result<()> {
-        let data: Arc<Mutex<Vec<u32>>> = Arc::default();
+    async fn test_static_server() -> Result<()> {
+        assert!(server().await.is_ok());
+        let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 57777)).await?;
+        let connection = server().await?.wait_for_new_connection().await;
 
-        let (s, mut server_received) = channel::<()>(1);
+        client.send(5).await?;
+        assert_eq!(5, connection.receive().await?);
 
-        assert!(server().await?.connections().await?.is_empty());
-
-        let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57777)).await?;
-
-        assert_eq!(client.peer_addr().await?, (Ipv4Addr::LOCALHOST, 57777).into());
-
-        let server_data = data.clone();
-        spawn(async move {
-            loop {
-                let val = server().await.unwrap().receive().await;
-                server_data.lock().await.push(val);
-                s.send(()).await.unwrap();
-            }
-        });
-
-        server().await?.wait_for_new_connection().await;
-
-        assert_eq!(
-            server().await?.connections().await?.first().unwrap().ip(),
-            Ipv4Addr::LOCALHOST
-        );
-
-        server().await?.send(0.0042).await?;
-        assert_eq!(Some(0.0042), client.receive().await);
-
-        client.send(55u32).await?;
-
-        server_received.recv().await.unwrap();
-
-        assert_eq!(vec![55], **data.lock().await);
+        connection.send(true).await?;
+        assert_eq!(true, client.receive().await?);
 
         drop(client);
-
-        sleep(Duration::from_secs_f32(0.2)).await;
-
-        server().await?.send(100.0).await?;
-
-        sleep(Duration::from_secs_f32(0.2)).await;
-
-        assert!(server().await?.connections().await?.is_empty());
-
-        server().await?.send(100.0).await?;
-
-        let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57777)).await?;
-        assert_eq!(client.peer_addr().await?, (Ipv4Addr::LOCALHOST, 57777).into());
-
-        sleep(Duration::from_secs_f32(0.2)).await;
-
-        assert_eq!(
-            server().await?.connections().await?.first().unwrap().ip(),
-            Ipv4Addr::LOCALHOST
-        );
-
-        server().await?.send(0.0042).await?;
-        assert_eq!(Some(0.0042), client.receive().await);
-
-        client.send(77u32).await?;
-        server_received.recv().await.unwrap();
-        assert_eq!(vec![55, 77], **data.lock().await);
 
         Ok(())
     }
 
     #[test(tokio::test)]
-    async fn test_reset_on_double_connection() -> Result<()> {
-        async fn double_server() -> Result<&'static Server<u32, f32>> {
-            static SERVER: OnceCell<Server<u32, f32>> = OnceCell::const_new();
+    async fn test_mismatched_types() -> Result<()> {
+        let server = Server::<i32, i32>::new(57778).await?;
+        let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
+        let connection = server.wait_for_new_connection().await;
 
-            SERVER
-                .get_or_try_init(|| async {
-                    let s = Server::new(57778).await?;
-                    Ok(s)
-                })
-                .await
-        }
-        let (s, mut server_received) = channel::<()>(1);
+        client.send(5).await?;
+        assert_eq!(5, connection.receive().await?);
 
-        let data: Arc<Mutex<Vec<u32>>> = Arc::default();
+        connection.send(true).await?;
 
-        assert!(double_server().await?.connections().await?.is_empty());
-
-        let client: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
-
-        let server_data = data.clone();
-        spawn(async move {
-            loop {
-                let val = double_server().await.unwrap().receive().await;
-                server_data.lock().await.push(val);
-                s.send(()).await.unwrap();
-            }
-        });
-
-        double_server().await?.wait_for_new_connection().await;
-
-        assert_eq!(client.peer_addr().await?, (Ipv4Addr::LOCALHOST, 57778).into());
+        let err = client.receive().await.err().unwrap();
 
         assert_eq!(
-            *double_server().await?.connections().await?.first().unwrap(),
-            client.local_addr().await?
+            r"Failed to deserialize from client: invalid type: integer `1`, expected a boolean at line 1 column 1",
+            err.to_string()
         );
 
-        let client2: Client<f32, u32> = Client::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
+        Ok(())
+    }
 
-        sleep(Duration::from_secs_f32(0.2)).await;
+    #[test(tokio::test)]
+    async fn stress_test_connection() -> Result<()> {
+        async fn test_connection(port: u16) -> Result<()> {
+            let server = Server::<i32, bool>::new(port).await?;
 
-        double_server().await?.send(0.0042).await?;
-        assert_eq!(Some(0.0042), client2.receive().await);
+            let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, port)).await?;
+            let connection = server.wait_for_new_connection().await;
 
-        client2.send(77u32).await?;
-        server_received.recv().await.unwrap();
-        assert_eq!(vec![77], **data.lock().await);
+            client.send(5).await?;
+            assert_eq!(5, connection.receive().await?);
+
+            connection.send(true).await?;
+            assert_eq!(true, client.receive().await?);
+
+            drop(client);
+
+            Ok(())
+        }
+
+        let mut set = JoinSet::new();
+
+        for i in 64000..64100 {
+            set.spawn(async move { test_connection(i).await });
+        }
+
+        while let Some(res) = set.join_next().await {
+            let output = res.expect("Task panicked");
+            println!("{:?}", output?);
+        }
+
+        Ok(())
+    }
+
+    #[test(tokio::test)]
+    async fn server_without_connections() -> Result<()> {
+        let server = Server::<i32, i32>::new(55432).await?;
+
+        let result = Retry::times(1)
+            .timeout(200)
+            .run(|| async {
+                server.wait_for_new_connection().await;
+                Ok(())
+            })
+            .await;
+
+        assert_eq!("Retry exceeded", result.err().unwrap().to_string());
 
         Ok(())
     }

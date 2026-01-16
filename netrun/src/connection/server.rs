@@ -1,17 +1,16 @@
 use std::{
     marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
 };
 
 use anyhow::Result;
-use log::{debug, error, trace, warn};
+use log::{debug, error, trace};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     net::{TcpListener, TcpStream},
     select, spawn,
     sync::{
-        Mutex, RwLock,
+        Mutex,
         mpsc::{Receiver, Sender, channel},
     },
 };
@@ -19,38 +18,36 @@ use tokio_util::sync::CancellationToken;
 
 use crate::connection::Client;
 
-type Connections<In, Out> = Arc<RwLock<Vec<Client<In, Out>>>>;
-
 pub struct Server<In, Out> {
-    connections: Connections<In, Out>,
-    cancel:      CancellationToken,
-    connected:   Mutex<Receiver<()>>,
-    reconnected: Mutex<Receiver<()>>,
-    _p:          PhantomData<Mutex<(In, Out)>>,
+    cancel:    CancellationToken,
+    connected: Mutex<Receiver<Client<In, Out>>>,
+    _p:        PhantomData<Mutex<(In, Out)>>,
 }
 
-impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'static> Server<In, Out> {
+impl<
+    In: Serialize + DeserializeOwned + Send + 'static,
+    Out: Serialize + DeserializeOwned + Clone + Send + 'static,
+> Server<In, Out>
+{
     pub async fn new(port: u16) -> Result<Self> {
         let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)).await?;
 
-        let connections = Arc::new(RwLock::new(vec![]));
         let cancel = CancellationToken::new();
 
-        let conn = connections.clone();
         let cn = cancel.clone();
 
         let (s, r) = channel(1);
-        let (re_s, re_r) = channel(1);
 
         spawn(async move {
             loop {
                 select! {
                     () = cn.cancelled() => {
+                        debug!("Stopping server listening on: {port}");
                         break;
                     }
                     connection = listener.accept() => {
                         match connection {
-                            Ok((stream, _)) => Self::add_connection(&conn, &s, &re_s, stream).await,
+                            Ok((stream, _)) => Self::add_connection(&s, stream).await,
                             Err(err) => error!("Failed to accept connection: {err}"),
                         }
                     }
@@ -59,121 +56,22 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize + Clone + Send + 'sta
         });
 
         Ok(Self {
-            connections,
             cancel,
             connected: Mutex::new(r),
-            reconnected: Mutex::new(re_r),
             _p: PhantomData,
         })
     }
 
-    pub async fn send(&self, msg: impl Into<Out>) -> Result<()> {
-        let msg = msg.into();
-        let connections = self.connections.read().await;
-
-        if connections.is_empty() {
-            warn!("Sending message to server without connections");
-            return Ok(());
-        }
-
-        for conn in connections.iter() {
-            let msg = msg.clone();
-            let result = conn.send(msg).await;
-
-            if let Err(err) = result
-                && let Some(io_err) = err.downcast_ref::<std::io::Error>()
-                && io_err.kind() == std::io::ErrorKind::BrokenPipe
-            {
-                let a = conn.peer_addr().await?;
-
-                debug!("Broken pipe! Removing connection: {a}");
-                // trigger cleanup logic here
-            }
-        }
-
-        Ok(())
+    pub async fn wait_for_new_connection(&self) -> Client<In, Out> {
+        self.connected.lock().await.recv().await.expect("Dropped server")
     }
 
-    pub async fn wait_for_new_connection(&self) {
-        self.connected.lock().await.recv().await;
-    }
+    async fn add_connection(new_connection: &Sender<Client<In, Out>>, stream: TcpStream) {
+        trace!("New connection");
 
-    pub async fn receive(&self) -> In {
-        loop {
-            trace!("Started receive loop");
+        let connection = Client::from_stream(stream);
 
-            if self.connections.read().await.is_empty() {
-                trace!("Waiting for new connection");
-                self.wait_for_new_connection().await;
-                trace!("New connection");
-            }
-
-            let conns = self.connections.read().await;
-            let conn = conns.first().unwrap();
-
-            trace!("Waiting for receive");
-
-            let mut reconnect = self.reconnected.lock().await;
-
-            select! {
-                _ = reconnect.recv() => {
-                    trace!("Received reconnected signal");
-                    continue;
-                }
-                val = conn.receive() => {
-                    if let Some(val) = val {
-                        trace!("Return val");
-                        return val;
-                    }
-                }
-            }
-
-            debug!("Removing failed connection from server.");
-
-            drop(conns);
-
-            self.connections.write().await.clear();
-
-            debug!("Removed failed connection.");
-        }
-    }
-
-    pub async fn connections(&self) -> Result<Vec<SocketAddr>> {
-        let conn = self.connections.read().await;
-
-        let mut res = vec![];
-
-        for conn in conn.iter() {
-            res.push(conn.peer_addr().await?);
-        }
-
-        Ok(res)
-    }
-
-    // TODO: handle more that 1 receiver
-    async fn add_connection(
-        connections: &Connections<In, Out>,
-        new_connection: &Sender<()>,
-        reconnected: &Sender<()>,
-        stream: TcpStream,
-    ) {
-        trace!("Adding connection");
-
-        if !connections.read().await.is_empty() {
-            trace!("Sending reconnected signal");
-            if let Err(err) = reconnected.send(()).await {
-                error!("Failed to send reconnected signal: {err}");
-            }
-        }
-
-        let mut connections = connections.write().await;
-
-        debug!("Connected: {}", stream.local_addr().unwrap());
-
-        connections.clear();
-
-        connections.push(Client::from_stream(stream));
-        if let Err(err) = new_connection.send(()).await {
+        if let Err(err) = new_connection.send(connection).await {
             error!("Failed to send connection signal: {err}");
         }
     }

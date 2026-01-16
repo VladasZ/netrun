@@ -1,8 +1,8 @@
 use core::net::SocketAddr;
 use std::marker::PhantomData;
 
-use anyhow::Result;
-use log::{debug, error};
+use anyhow::{Result, anyhow};
+use log::{debug, error, warn};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -25,7 +25,7 @@ use crate::{
 
 pub struct Client<In, Out> {
     write:    RwLock<OwnedWriteHalf>,
-    receiver: Mutex<Receiver<Option<In>>>,
+    receiver: Mutex<Receiver<Result<In>>>,
     cancel:   CancellationToken,
     _p:       PhantomData<Mutex<Out>>,
 }
@@ -40,7 +40,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
         let id = System::generate_app_instance_id();
         let cancel = CancellationToken::new();
 
-        let (s, r) = channel::<Option<In>>(1);
+        let (s, r) = channel(1);
         let (mut read, write) = stream.into_split();
         let cn = cancel.clone();
 
@@ -78,8 +78,13 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
         Ok(())
     }
 
-    pub async fn receive(&self) -> Option<In> {
-        self.receiver.lock().await.recv().await.unwrap()
+    pub async fn receive(&self) -> Result<In> {
+        self.receiver
+            .lock()
+            .await
+            .recv()
+            .await
+            .ok_or(anyhow!("Receiving from dropped connection"))?
     }
 
     pub async fn local_addr(&self) -> Result<SocketAddr> {
@@ -100,14 +105,14 @@ impl<In, Out> Drop for Client<In, Out> {
 async fn handle_read<In: DeserializeOwned>(
     bytes: std::io::Result<usize>,
     buf: &[u8],
-    sender: &Sender<Option<In>>,
+    sender: &Sender<Result<In>>,
 ) {
     let bytes = match bytes {
         Ok(b) => b,
         Err(err) => {
             error!("Failed to receive from client: {err}");
             _ = sender
-                .send(None)
+                .send(Err(anyhow!("Failed to receive from client: {err}")))
                 .await
                 .inspect_err(|e| error!("Failed to send None from client: {e}"));
             return;
@@ -115,16 +120,22 @@ async fn handle_read<In: DeserializeOwned>(
     };
 
     if bytes == 0 {
+        warn!("Received empty buffer");
         return;
     }
-    let Ok(msg) =
-        deserialize::<In>(&buf[..bytes]).inspect_err(|e| error!("Failed to deserialize from client: {e}"))
-    else {
-        return;
-    };
 
-    _ = sender
-        .send(Some(msg))
-        .await
-        .inspect_err(|e| error!("Failed to send msg from client: {e}"));
+    match deserialize::<In>(&buf[..bytes]) {
+        Ok(msg) => {
+            _ = sender
+                .send(Ok(msg))
+                .await
+                .inspect_err(|e| error!("Failed to send msg from client: {e}"));
+        }
+        Err(err) => {
+            _ = sender
+                .send(Err(anyhow!("Failed to deserialize from client: {err}")))
+                .await
+                .inspect_err(|e| error!("Failed to send None from client: {e}"));
+        }
+    }
 }

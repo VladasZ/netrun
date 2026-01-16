@@ -30,6 +30,8 @@ impl Retry {
     where F: Future<Output = Result<Ret>> {
         let timeout = Duration::from_millis(self.timeout);
 
+        assert_ne!(self.times, 0, "Trying to retry 0 times");
+
         while self.times > 0 {
             self.times -= 1;
             match tokio::time::timeout(timeout, fut()).await {
