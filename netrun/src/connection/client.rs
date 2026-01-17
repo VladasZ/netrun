@@ -28,6 +28,7 @@ pub struct Client<In, Out> {
     receiver: Mutex<Receiver<Result<In>>>,
     cancel:   CancellationToken,
     address:  SocketAddr,
+    id:       String,
     _p:       PhantomData<Mutex<Out>>,
 }
 
@@ -69,6 +70,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
             receiver: Mutex::new(r),
             cancel,
             address,
+            id,
             _p: PhantomData,
         }
     }
@@ -112,6 +114,7 @@ impl<In, Out> std::fmt::Debug for Client<In, Out> {
         let o = type_name::<Out>();
 
         f.debug_struct(&format!("Client<{i}, {o}>"))
+            .field("id", &self.id)
             .field("address", &self.address)
             .finish()
     }

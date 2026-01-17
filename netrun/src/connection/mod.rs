@@ -123,10 +123,11 @@ mod test {
         let server = Server::<i32, bool>::new(555).await?;
         let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 555)).await?;
 
-        assert_eq!(
-            "Client<bool, i32> { address: 127.0.0.1:555 } Server<i32, bool> { port: 555 }",
-            format!("{client:?} {server:?}")
-        );
+        assert_eq!("Server<i32, bool> { port: 555 }", format!("{server:?}"));
+
+        let client_dbg = format!("{client:?}");
+
+        assert!(client_dbg.contains("address: 127.0.0.1:555 }") && client_dbg.contains("Client<bool, i32>"));
 
         Ok(())
     }
