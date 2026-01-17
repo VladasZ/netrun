@@ -1,4 +1,5 @@
 use std::{
+    any::type_name,
     marker::PhantomData,
     net::{IpAddr, Ipv4Addr, SocketAddr},
 };
@@ -21,6 +22,7 @@ use crate::connection::Client;
 pub struct Server<In, Out> {
     cancel:    CancellationToken,
     connected: Mutex<Receiver<Client<In, Out>>>,
+    port:      u16,
     _p:        PhantomData<Mutex<(In, Out)>>,
 }
 
@@ -58,6 +60,7 @@ impl<
         Ok(Self {
             cancel,
             connected: Mutex::new(r),
+            port,
             _p: PhantomData,
         })
     }
@@ -80,5 +83,14 @@ impl<
 impl<In, Out> Drop for Server<In, Out> {
     fn drop(&mut self) {
         self.cancel.cancel();
+    }
+}
+
+impl<In, Out> std::fmt::Debug for Server<In, Out> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let i = type_name::<In>();
+        let o = type_name::<Out>();
+
+        f.debug_struct(&format!("Server<{i}, {o}>")).field("port", &self.port).finish()
     }
 }

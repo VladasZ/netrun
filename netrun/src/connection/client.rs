@@ -1,5 +1,5 @@
 use core::net::SocketAddr;
-use std::marker::PhantomData;
+use std::{any::type_name, marker::PhantomData};
 
 use anyhow::{Result, anyhow};
 use log::{debug, error, warn};
@@ -27,6 +27,7 @@ pub struct Client<In, Out> {
     write:    RwLock<OwnedWriteHalf>,
     receiver: Mutex<Receiver<Result<In>>>,
     cancel:   CancellationToken,
+    address:  SocketAddr,
     _p:       PhantomData<Mutex<Out>>,
 }
 
@@ -40,11 +41,13 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
         let id = System::generate_app_instance_id();
         let cancel = CancellationToken::new();
 
+        let address = stream.peer_addr().expect("No stream local addr");
+
         let (s, r) = channel(1);
         let (mut read, write) = stream.into_split();
         let cn = cancel.clone();
-
         let idd = id.clone();
+
         spawn(async move {
             let mut buf = vec![0u8; BUFFER_SIZE];
 
@@ -65,6 +68,7 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
             write: RwLock::new(write),
             receiver: Mutex::new(r),
             cancel,
+            address,
             _p: PhantomData,
         }
     }
@@ -99,6 +103,17 @@ impl<In: DeserializeOwned + Send + 'static, Out: Serialize> Client<In, Out> {
 impl<In, Out> Drop for Client<In, Out> {
     fn drop(&mut self) {
         self.cancel.cancel();
+    }
+}
+
+impl<In, Out> std::fmt::Debug for Client<In, Out> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let i = type_name::<In>();
+        let o = type_name::<Out>();
+
+        f.debug_struct(&format!("Client<{i}, {o}>"))
+            .field("address", &self.address)
+            .finish()
     }
 }
 

@@ -117,4 +117,17 @@ mod test {
 
         Ok(())
     }
+
+    #[test(tokio::test)]
+    async fn connection_debug_impl() -> Result<()> {
+        let server = Server::<i32, bool>::new(555).await?;
+        let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 555)).await?;
+
+        assert_eq!(
+            "Client<bool, i32> { address: 127.0.0.1:555 } Server<i32, bool> { port: 555 }",
+            format!("{client:?} {server:?}")
+        );
+
+        Ok(())
+    }
 }
