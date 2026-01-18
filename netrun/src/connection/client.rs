@@ -108,6 +108,7 @@ impl<In, Out> Drop for Client<In, Out> {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl<In, Out> std::fmt::Debug for Client<In, Out> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let i = type_name::<In>();

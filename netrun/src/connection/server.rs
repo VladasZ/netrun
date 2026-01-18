@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
+use hreads::log_spawn;
 use log::{debug, error, trace};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
@@ -17,12 +18,13 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::connection::Client;
+use crate::{Service, System, connection::Client};
 
 pub struct Server<In, Out> {
     cancel:    CancellationToken,
     connected: Mutex<Receiver<Client<In, Out>>>,
     port:      u16,
+    pub id:    String,
     _p:        PhantomData<Mutex<(In, Out)>>,
 }
 
@@ -31,7 +33,8 @@ impl<
     Out: Serialize + DeserializeOwned + Clone + Send + 'static,
 > Server<In, Out>
 {
-    pub async fn new(port: u16) -> Result<Self> {
+    pub async fn start(port: u16) -> Result<Self> {
+        let id = System::generate_app_instance_id();
         let listener = TcpListener::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)).await?;
 
         let cancel = CancellationToken::new();
@@ -61,8 +64,30 @@ impl<
             cancel,
             connected: Mutex::new(r),
             port,
+            id,
             _p: PhantomData,
         })
+    }
+
+    pub async fn serve(&self, service: impl Service<In, Out> + Clone + Send + 'static) -> Result<()> {
+        loop {
+            let connection = self.wait_for_new_connection().await;
+
+            let ser = service.clone();
+            log_spawn::<anyhow::Error>(async move {
+                loop {
+                    let msg = connection.receive().await?;
+                    match ser.respond(msg).await {
+                        Ok(response) => {
+                            connection.send(response).await?;
+                        }
+                        Err(err) => {
+                            error!("Server failed to respond: {err}");
+                        }
+                    }
+                }
+            });
+        }
     }
 
     pub async fn wait_for_new_connection(&self) -> Client<In, Out> {
@@ -86,6 +111,7 @@ impl<In, Out> Drop for Server<In, Out> {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl<In, Out> std::fmt::Debug for Server<In, Out> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let i = type_name::<In>();

@@ -3,9 +3,11 @@ const BUFFER_SIZE: usize = 1024 * 8;
 mod client;
 mod serde;
 mod server;
+mod service;
 
 pub use client::*;
 pub use server::*;
+pub use service::*;
 
 #[cfg(test)]
 mod test {
@@ -24,7 +26,7 @@ mod test {
 
         SERVER
             .get_or_try_init(|| async {
-                let s = Server::new(57777).await?;
+                let s = Server::start(57777).await?;
                 Ok(s)
             })
             .await
@@ -49,7 +51,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_mismatched_types() -> Result<()> {
-        let server = Server::<i32, i32>::new(57778).await?;
+        let server = Server::<i32, i32>::start(57778).await?;
         let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 57778)).await?;
         let connection = server.wait_for_new_connection().await;
 
@@ -71,7 +73,7 @@ mod test {
     #[test(tokio::test)]
     async fn stress_test_connection() -> Result<()> {
         async fn test_connection(port: u16) -> Result<()> {
-            let server = Server::<i32, bool>::new(port).await?;
+            let server = Server::<i32, bool>::start(port).await?;
 
             let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, port)).await?;
             let connection = server.wait_for_new_connection().await;
@@ -103,7 +105,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn server_without_connections() -> Result<()> {
-        let server = Server::<i32, i32>::new(55432).await?;
+        let server = Server::<i32, i32>::start(55432).await?;
 
         let result = Retry::times(1)
             .timeout(200)
@@ -120,7 +122,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn connection_debug_impl() -> Result<()> {
-        let server = Server::<i32, bool>::new(555).await?;
+        let server = Server::<i32, bool>::start(555).await?;
         let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 555)).await?;
 
         assert_eq!("Server<i32, bool> { port: 555 }", format!("{server:?}"));

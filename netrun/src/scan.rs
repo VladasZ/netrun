@@ -98,7 +98,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_scan() -> Result<()> {
-        let _server: Server<(), ()> = Server::new(57779).await?;
+        let _server: Server<(), ()> = Server::start(57779).await?;
 
         let (ip, open_ports) = scan_for_port(57779).await?.into_iter().next().unwrap();
 
