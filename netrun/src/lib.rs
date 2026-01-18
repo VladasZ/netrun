@@ -1,3 +1,4 @@
+mod compress;
 #[cfg(not_wasm)]
 mod connection;
 pub mod rest;
@@ -10,6 +11,7 @@ pub mod secret;
 mod system;
 mod tests;
 
+pub use compress::*;
 #[cfg(not_wasm)]
 pub use connection::*;
 pub use local_ip_address::*;
