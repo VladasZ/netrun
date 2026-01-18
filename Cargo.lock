@@ -958,7 +958,7 @@ dependencies = [
  "gloo-timers",
  "log",
  "parking_lot",
- "plat",
+ "plat 0.5.0",
  "pollster",
  "tokio",
  "wasm-bindgen-futures",
@@ -1507,7 +1507,7 @@ dependencies = [
  "local-ip-address",
  "log",
  "parking_lot",
- "plat",
+ "plat 0.6.0",
  "pretty_assertions",
  "reqwest 0.13.1",
  "rust-network-scanner",
@@ -1675,6 +1675,15 @@ name = "plat"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8583d1b7e3e4d738a525c89ec05846f02cb068dea4f865aca8c1799b03a57ac"
+dependencies = [
+ "cfg_aliases",
+]
+
+[[package]]
+name = "plat"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7d18144cb53f7bc4ff6f32ce3d5e0f7741303dc5483103abe4287989ea642ec"
 dependencies = [
  "cfg_aliases",
 ]

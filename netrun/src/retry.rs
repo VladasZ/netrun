@@ -57,6 +57,7 @@ mod test {
     use std::net::Ipv4Addr;
 
     use anyhow::anyhow;
+    use plat::Platform;
     use pretty_assertions::assert_eq;
     use test_log::test;
     use tokio::time::sleep;
@@ -69,10 +70,17 @@ mod test {
         let result: Result<Client<(), ()>> =
             Retry::times(5).run(|| Client::connect((Ipv4Addr::LOCALHOST, 60000))).await;
 
-        assert_eq!(
-            anyhow!("Connection refused (os error 61)").to_string(),
-            result.err().unwrap().to_string()
-        );
+        if Platform::LINUX {
+            assert_eq!(
+                anyhow!("Connection refused (os error 111)").to_string(),
+                result.err().unwrap().to_string()
+            );
+        } else {
+            assert_eq!(
+                anyhow!("Connection refused (os error 61)").to_string(),
+                result.err().unwrap().to_string()
+            );
+        }
 
         Ok(())
     }

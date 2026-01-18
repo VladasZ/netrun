@@ -24,6 +24,7 @@ local-ip-address = { workspace = true }
 sysinfo = { workspace = true }
 byte-unit = { workspace = true }
 hreads = { workspace = true }
+plat = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true }
