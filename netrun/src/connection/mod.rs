@@ -122,15 +122,15 @@ mod test {
 
     #[test(tokio::test)]
     async fn connection_debug_impl() -> Result<()> {
-        let server = Server::<i32, bool>::start(55555).await?;
-        let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 55555)).await?;
+        let server = Server::<i32, bool>::start(55550).await?;
+        let client = Client::<bool, i32>::connect((Ipv4Addr::LOCALHOST, 55550)).await?;
 
-        assert_eq!("Server<i32, bool> { port: 55555 }", format!("{server:?}"));
+        assert_eq!("Server<i32, bool> { port: 55550 }", format!("{server:?}"));
 
         let client_dbg = format!("{client:?}");
 
         assert!(
-            client_dbg.contains("address: 127.0.0.1:55555 }") && client_dbg.contains("Client<bool, i32>")
+            client_dbg.contains("address: 127.0.0.1:55550 }") && client_dbg.contains("Client<bool, i32>")
         );
 
         Ok(())

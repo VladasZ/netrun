@@ -2,7 +2,7 @@ use core::net::SocketAddr;
 use std::{any::type_name, marker::PhantomData};
 
 use anyhow::{Result, anyhow};
-use log::{debug, error, warn};
+use log::{debug, error};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -139,7 +139,6 @@ async fn handle_read<In: DeserializeOwned>(
     };
 
     if bytes == 0 {
-        warn!("Received empty buffer");
         return;
     }
 
