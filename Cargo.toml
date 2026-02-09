@@ -8,28 +8,28 @@ members = ["netrun", "tests"]
 
 [workspace.dependencies]
 anyhow = "1.0"
-tokio = { version = "1.48", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+hreads = "0.13"
 log = "0.4"
 pretty_assertions = "1.4"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
-hreads = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.49", features = ["full"] }
 #hreads = { path = "../hreads" }
-plat = "0.6"
-wasm-bindgen-test = "0.3"
-parking_lot = "0.12"
-infisical = "0.0.3"
-dotenvy = "0.15"
-tokio-util = "0.7"
-sysinfo = "0.37"
 byte-unit = "5.2"
-lz4_flex = "0.12"
-local-ip-address = "0.6"
+dotenvy = "0.15"
 env_logger = "0.11"
+infisical = "0.0.3"
+local-ip-address = "0.6"
+lz4_flex = "0.12"
+parking_lot = "0.12"
+plat = "0.8"
 rust-network-scanner = "2.0"
+sysinfo = "0.38"
 test-log = { git = "https://github.com/VladasZ/test-log", rev = "0cd1a2aea94b5ab70d316485f8fbaf7a1979d129", features = [
   "trace",
 ] }
+tokio-util = "0.7"
+wasm-bindgen-test = "0.3"
 
 netrun = { path = "netrun" }

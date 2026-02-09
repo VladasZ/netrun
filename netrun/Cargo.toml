@@ -1,45 +1,44 @@
 [package]
-name = "netrun"
-version = "0.25.0"
-edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
-license = "MIT OR Apache-2.0"
+edition = "2024"
 homepage = "https://github.com/VladasZ/netrun"
+license = "MIT OR Apache-2.0"
+name = "netrun"
 repository = "https://github.com/VladasZ/netrun"
+version = "0.26.0"
 
 [lib]
+crate-type = ["dylib", "rlib", "staticlib"]
 name = "netrun"
-crate-type = ["rlib", "staticlib", "dylib"]
 
 
 [dependencies]
 anyhow = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-log = { workspace = true }
-parking_lot = { workspace = true }
-reqwest = { workspace = true }
-local-ip-address = { workspace = true }
-sysinfo = { workspace = true }
 byte-unit = { workspace = true }
 hreads = { workspace = true }
-plat = { workspace = true }
+local-ip-address = { workspace = true }
+log = { workspace = true }
 lz4_flex = { workspace = true }
+parking_lot = { workspace = true }
+plat = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sysinfo = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { workspace = true }
-tokio-util = { workspace = true }
 infisical = { workspace = true }
 rust-network-scanner = { workspace = true }
-tokio-retry = "0.3"
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = { workspace = true }
-wasm-bindgen-test = { workspace = true }
 dotenvy = { workspace = true }
 env_logger = { workspace = true }
+pretty_assertions = { workspace = true }
 test-log = { workspace = true }
+wasm-bindgen-test = { workspace = true }
 
 
 [build-dependencies]
