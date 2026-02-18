@@ -6,7 +6,7 @@ homepage = "https://github.com/VladasZ/netrun"
 license = "MIT OR Apache-2.0"
 name = "netrun"
 repository = "https://github.com/VladasZ/netrun"
-version = "0.26.0"
+version = "0.27.0"
 
 [lib]
 crate-type = ["dylib", "rlib", "staticlib"]
@@ -26,13 +26,13 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sysinfo = { workspace = true }
-zeromq = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 infisical = { workspace = true }
 rust-network-scanner = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+zeromq = { workspace = true }
 
 [dev-dependencies]
 dotenvy = { workspace = true }

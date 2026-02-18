@@ -69,6 +69,13 @@ mod test {
             assert_eq!(req.send(i).await?, i * 2);
         }
 
+        drop(req);
+
+        let req2 = Req::<i32, i32>::new("tcp://127.0.0.1:6969").await?;
+
+        for i in 0..100 {
+            assert_eq!(req2.send(i).await?, i * 2);
+        }
 
         Ok(())
     }
