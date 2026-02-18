@@ -17,7 +17,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     System,
-    connection::BUFFER_SIZE, serde::{deserialize, serialize},
+    connection::BUFFER_SIZE,
+    serde::{deserialize, serialize},
 };
 
 pub struct Client<In, Out> {

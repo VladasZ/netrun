@@ -1,13 +1,10 @@
 use std::any::type_name;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use hreads::spawn;
 use log::error;
 use serde::{Serialize, de::DeserializeOwned};
-use zeromq::RepSocket;
-use zeromq::Socket;
-use zeromq::SocketRecv;
-use zeromq::SocketSend;
+use zeromq::{RepSocket, Socket, SocketRecv, SocketSend};
 
 use crate::{
     Function,
@@ -28,56 +25,20 @@ impl<In: DeserializeOwned + 'static, Out: Serialize + 'static> Rep<In, Out> {
 
         spawn(async move {
             loop {
-                let mut repl: String = socket.recv().await.unwrap().try_into().unwrap();
-                println!("Received: {:?}", repl);
-                repl.push_str(" Reply");
-                socket.send(repl.into()).await.unwrap();
+                let result: Result<()> = async {
+                    let data: Vec<u8> = socket.recv().await?.try_into().map_err(|err| anyhow!("{err}"))?;
 
-                // let bytes = match socket.recv_bytes(0) {
-                //     Ok(bytes) => bytes,
-                //     Err(err) => {
-                //         error!("Failed to receive in {}: {err}", type_name::<Self>());
-                //         continue;
-                //     }
-                // };
+                    let input: In = deserialize(&data)?;
+                    let output = function.call(input);
+                    let out_data = serialize(output)?;
 
-                // let input: In = match deserialize(&bytes) {
-                //     Ok(input) => input,
-                //     Err(err) => {
-                //         error!(
-                //             "Failed to parse input packet for: {}. Error:\n{err}",
-                //             type_name::<Self>(),
-                //         );
+                    socket.send(out_data.into()).await?;
 
-                //         let _ = socket.send("Error", 0).inspect_err(|err| {
-                //             error!("{err}");
-                //         });
+                    Ok(())
+                }
+                .await;
 
-                //         continue;
-                //     }
-                // };
-
-                // let output = function.call(input);
-
-                // let out_data = match serialize(&output) {
-                //     Ok(output) => output,
-                //     Err(err) => {
-                //         error!(
-                //             "Failed to serialize output packet for: {}. Error:\n{err}",
-                //             type_name::<Self>(),
-                //         );
-
-                //         let _ = socket.send("Error", 0).inspect_err(|err| {
-                //             error!("{err}");
-                //         });
-
-                //         continue;
-                //     }
-                // };
-
-                // let _ = socket.send(out_data, 0).inspect_err(|err| {
-                //     error!("Failed to send response: {err}");
-                // });
+                _ = result.inspect_err(|err| error!("{}: {err}", type_name::<Self>()));
             }
         });
 
@@ -92,10 +53,9 @@ impl<In: DeserializeOwned + 'static, Out: Serialize + 'static> Rep<In, Out> {
 #[cfg(test)]
 mod test {
 
-
     use anyhow::Result;
 
-    use crate::zmq::Rep;
+    use crate::zmq::{Rep, Req};
 
     #[tokio::test]
     async fn test_rep() -> Result<()> {
@@ -103,9 +63,12 @@ mod test {
 
         rep.on_receive(|val| val * 2);
 
-        loop {}
+        let req = Req::<i32, i32>::new("tcp://127.0.0.1:6969").await?;
 
-        // sleep(Duration::from_secs_f32(1.0)).await;
+        for i in 0..100 {
+            assert_eq!(req.send(i).await?, i * 2);
+        }
+
 
         Ok(())
     }

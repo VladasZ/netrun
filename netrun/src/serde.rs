@@ -2,7 +2,7 @@ use anyhow::Result;
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 use serde::{Serialize, de::DeserializeOwned};
 
-pub fn serialize(val: &impl Serialize) -> Result<Vec<u8>> {
+pub fn serialize(val: impl Serialize) -> Result<Vec<u8>> {
     Ok(compress(&serde_json::to_string(&val)?.into_bytes()))
 }
 
@@ -30,18 +30,18 @@ mod test {
 
     #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
     struct User {
-        age: i32,
+        age:    i32,
         height: f32,
-        name: String,
+        name:   String,
     }
 
     #[test]
     fn test_compress() -> Result<()> {
         let users = vec![
             User {
-                age: 55,
+                age:    55,
                 height: 1.9,
-                name: "Roma".to_owned(),
+                name:   "Roma".to_owned(),
             };
             100
         ];
