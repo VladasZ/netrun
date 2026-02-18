@@ -53,15 +53,24 @@ impl<In: DeserializeOwned + 'static, Out: Serialize + 'static> Rep<In, Out> {
 #[cfg(test)]
 mod test {
 
+    use std::net::{IpAddr, Ipv4Addr};
+
     use anyhow::Result;
 
-    use crate::zmq::{Rep, Req};
+    use crate::{
+        scan_for_port,
+        zmq::{Rep, Req},
+    };
 
     #[tokio::test]
     async fn test_rep() -> Result<()> {
         let rep = Rep::<i32, i32>::new("tcp://0.0.0.0:6969").await?;
 
         rep.on_receive(|val| val * 2);
+
+        let ports: Vec<_> = scan_for_port(6969).await?.into_iter().map(|(ip, _)| ip).collect();
+
+        assert!(ports.contains(&IpAddr::V4(Ipv4Addr::LOCALHOST)));
 
         let req = Req::<i32, i32>::new("tcp://127.0.0.1:6969").await?;
 
