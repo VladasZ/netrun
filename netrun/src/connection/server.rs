@@ -28,10 +28,8 @@ pub struct Server<In, Out> {
     _p:        PhantomData<Mutex<(In, Out)>>,
 }
 
-impl<
-    In: Serialize + DeserializeOwned + Send + 'static,
-    Out: Serialize + DeserializeOwned + Clone + Send + 'static,
-> Server<In, Out>
+impl<In: Serialize + DeserializeOwned + Send + 'static, Out: Serialize + DeserializeOwned + Send + 'static>
+    Server<In, Out>
 {
     pub async fn start(port: u16) -> Result<Self> {
         let id = System::generate_app_instance_id();

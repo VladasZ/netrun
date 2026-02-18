@@ -3,7 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub trait Service<
     In: Serialize + DeserializeOwned + Send + 'static,
-    Out: Serialize + DeserializeOwned + Clone + Send + 'static,
+    Out: Serialize + DeserializeOwned + Send + 'static,
 > {
     fn respond(&self, i: In) -> impl std::future::Future<Output = Result<Out>> + Send;
 }
