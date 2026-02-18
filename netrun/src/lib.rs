@@ -1,4 +1,3 @@
-mod compress;
 #[cfg(not_wasm)]
 mod connection;
 mod function;
@@ -9,11 +8,11 @@ mod retry;
 mod scan;
 #[cfg(not_wasm)]
 pub mod secret;
+pub mod serde;
 mod system;
 mod tests;
 pub mod zmq;
 
-pub use compress::*;
 #[cfg(not_wasm)]
 pub use connection::*;
 pub use function::*;

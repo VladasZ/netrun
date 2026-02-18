@@ -1,7 +1,6 @@
 const BUFFER_SIZE: usize = 1024 * 16;
 
 mod client;
-mod serde;
 mod server;
 mod service;
 
