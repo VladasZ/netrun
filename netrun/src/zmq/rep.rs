@@ -80,7 +80,7 @@ mod test {
 
         drop(req);
 
-        let req2 = Req::<i32, i32>::new("tcp://127.0.0.1:6969").await?;
+        let req2 = Req::<i32, i32>::new(&format!("tcp://{}:6969", IpAddr::V4(Ipv4Addr::LOCALHOST))).await?;
 
         for i in 0..100 {
             assert_eq!(req2.send(i).await?, i * 2);
