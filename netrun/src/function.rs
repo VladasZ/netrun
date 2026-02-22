@@ -1,4 +1,4 @@
-use std::{any::type_name, sync::Arc};
+use std::{any::type_name, fmt::Debug, sync::Arc};
 
 use log::error;
 use parking_lot::Mutex;
@@ -41,5 +41,28 @@ impl<In, Out> Clone for Function<In, Out> {
         Self {
             fun: self.fun.clone(),
         }
+    }
+}
+
+impl<In, Out> Debug for Function<In, Out> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        format!("Function<{}, {}>", type_name::<In>(), type_name::<Out>()).fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashSet;
+
+    use crate::Function;
+
+    #[test]
+    fn test_function() {
+        let fun = Function::<String, HashSet<i32>>::default();
+
+        assert_eq!(
+            "\"Function<alloc::string::String, std::collections::hash::set::HashSet<i32>>\"",
+            format!("{fun:?}")
+        );
     }
 }
