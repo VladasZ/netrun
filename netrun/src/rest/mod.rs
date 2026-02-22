@@ -2,11 +2,13 @@ mod method;
 mod request;
 mod response;
 mod rest_api;
+mod simple;
 
 pub use method::Method;
 pub use request::Request;
 pub use response::Response;
 pub use rest_api::RestAPI;
+pub use simple::*;
 
 #[cfg(test)]
 mod test {
@@ -46,12 +48,22 @@ mod test {
         use pretty_assertions::assert_eq;
 
         use super::*;
+        use crate::rest::get;
 
         #[tokio::test]
         async fn test_rest() -> Result<()> {
             RestAPI::init("https://jsonplaceholder.typicode.com/");
 
             let users = USERS.await?;
+
+            assert_eq!(users.len(), 10);
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn test_simple() -> Result<()> {
+            let users: Vec<User> = get("https://jsonplaceholder.typicode.com/users").await?;
 
             assert_eq!(users.len(), 10);
 

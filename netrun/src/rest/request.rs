@@ -41,14 +41,14 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
 
 impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
     pub async fn send(&self, param: impl Borrow<Param>) -> Result<Output> {
-        request_object(Method::Get, self.full_url(), &RestAPI::headers(), to_body(param)?).await
+        request_object(Method::Get, self.full_url(), RestAPI::headers(), to_body(param)?).await
     }
 
     pub async fn with_token(&self, param: impl Borrow<Param>, token: impl ToString) -> Result<Output> {
         request_object(
             Method::Get,
             self.full_url(),
-            &[("token".to_string(), token.to_string())].into(),
+            [("token".to_string(), token.to_string())].into(),
             to_body(param)?,
         )
         .await
@@ -61,19 +61,21 @@ impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
     ) -> Result<Output> {
         let body = to_string(param.borrow())?;
 
-        request_object(Method::Get, self.full_url(), &headers.into(), body.into()).await
+        request_object(Method::Get, self.full_url(), headers.into(), body.into()).await
     }
 }
 
-async fn request_object<T>(
+pub(crate) async fn request_object<T>(
     method: Method,
-    url: String,
-    headers: &HashMap<String, String>,
+    url: impl ToString,
+    headers: HashMap<String, String>,
     body: Option<String>,
 ) -> Result<T>
 where
     T: DeserializeOwned,
 {
+    let url = url.to_string();
+
     let response = raw_request(method, &url, headers, body).await?;
 
     if response.status == 404 {
@@ -97,10 +99,10 @@ fn parse<T: DeserializeOwned>(json: impl ToString) -> Result<T> {
     }
 }
 
-pub async fn raw_request(
+async fn raw_request(
     method: Method,
     url: impl ToString,
-    headers: &HashMap<String, String>,
+    headers: HashMap<String, String>,
     body: Option<String>,
 ) -> Result<Response> {
     let url = url.to_string();
