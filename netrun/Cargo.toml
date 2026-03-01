@@ -6,7 +6,7 @@ homepage = "https://github.com/VladasZ/netrun"
 license = "MIT OR Apache-2.0"
 name = "netrun"
 repository = "https://github.com/VladasZ/netrun"
-version = "0.29.0"
+version = "0.30.0"
 
 [lib]
 crate-type = ["dylib", "rlib", "staticlib"]
