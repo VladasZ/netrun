@@ -1,68 +1,56 @@
-use std::{collections::HashMap, fmt::Display, sync::OnceLock};
+use std::collections::BTreeMap;
 
 use parking_lot::Mutex;
+use serde::{Serialize, de::DeserializeOwned};
 
-static STATIC_API: OnceLock<RestAPI> = OnceLock::new();
+use crate::rest::Request;
 
 #[derive(Debug)]
 pub struct RestAPI {
-    base_url: String,
-    headers:  Mutex<HashMap<String, String>>,
+    base_url: &'static str,
+    headers:  Mutex<BTreeMap<String, String>>,
 }
 
 impl RestAPI {
-    pub fn init(base_url: impl Display) {
-        _ = STATIC_API
-            .set(Self {
-                base_url: format!("{base_url}"),
-                headers:  Mutex::default(),
-            })
-            .inspect_err(|_| {
-                log::warn!("Double init of RestAPI");
-                let url = format!("{base_url}");
-                if url != Self::base_url() {
-                    panic!(
-                        "Initialization of RestAPI with different base URL is not supported. Was: {}, new: \
-                         {url}",
-                        Self::base_url()
-                    )
-                }
-            });
-
-        Self::clear_all_headers();
-    }
-
-    pub fn is_ok() -> bool {
-        STATIC_API.get().is_some()
-    }
-
-    fn get() -> &'static Self {
-        STATIC_API.get().expect("API is not initialised. Use API::init(\"base_url\")")
+    pub const fn new(base_url: &'static str) -> Self {
+        Self {
+            base_url,
+            headers: Mutex::new(BTreeMap::new()),
+        }
     }
 }
 
 impl RestAPI {
-    pub fn base_url() -> &'static str {
-        &Self::get().base_url
+    pub fn base_url(&self) -> &str {
+        self.base_url
     }
 
-    pub fn headers() -> HashMap<String, String> {
-        Self::get().headers.lock().clone()
+    pub fn headers(&self) -> BTreeMap<String, String> {
+        self.headers.lock().clone()
     }
 
-    pub fn remove_header(key: impl ToString) {
-        Self::get().headers.lock().remove(&key.to_string());
+    pub fn remove_header(&self, key: impl ToString) {
+        self.headers.lock().remove(&key.to_string());
     }
 
-    pub fn clear_all_headers() {
-        Self::get().headers.lock().clear();
+    pub fn clear_all_headers(&self) {
+        self.headers.lock().clear();
     }
 
-    pub fn add_header(key: impl ToString, value: impl ToString) {
-        Self::get().headers.lock().insert(key.to_string(), value.to_string());
+    pub fn add_header(&self, key: impl ToString, value: impl ToString) {
+        self.headers.lock().insert(key.to_string(), value.to_string());
     }
 
-    pub fn set_access_token(token: impl ToString) {
-        Self::add_header("token", token);
+    pub fn set_access_token(&self, token: impl ToString) {
+        self.add_header("token", token);
+    }
+}
+
+impl RestAPI {
+    pub const fn request<In: Serialize, Out: DeserializeOwned>(
+        &'static self,
+        path: &'static str,
+    ) -> Request<In, Out> {
+        Request::new(path, self)
     }
 }

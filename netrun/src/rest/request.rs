@@ -1,4 +1,4 @@
-use std::{any::type_name, borrow::Borrow, collections::HashMap, marker::PhantomData};
+use std::{any::type_name, borrow::Borrow, collections::BTreeMap, marker::PhantomData};
 
 use anyhow::{Result, anyhow, bail};
 use log::{debug, error};
@@ -10,38 +10,39 @@ use crate::rest::{Method, Response, RestAPI};
 
 #[derive(Debug)]
 pub struct Request<In: Serialize, Out: DeserializeOwned> {
-    pub name: &'static str,
-    _p:       PhantomData<fn(In) -> Out>,
+    path: &'static str,
+    api:  &'static RestAPI,
+    _p:   PhantomData<fn(In) -> Out>,
 }
 
+impl<In: Serialize, Out: DeserializeOwned> Copy for Request<In, Out> {}
 impl<In: Serialize, Out: DeserializeOwned> Clone for Request<In, Out> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<In: Serialize, Out: DeserializeOwned> Copy for Request<In, Out> {}
-
 impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
-    pub const fn new(name: &'static str) -> Self {
+    pub(crate) const fn new(path: &'static str, api: &'static RestAPI) -> Self {
         Self {
-            name,
+            path,
+            api,
             _p: PhantomData,
         }
     }
 
     fn full_url(&self) -> String {
-        format!("{}/{}", RestAPI::base_url(), self.name)
+        format!("{}/{}", self.api.base_url(), self.path)
     }
 
     pub fn description(&self) -> String {
-        format!("{} {}->{}", self.name, type_name::<In>(), type_name::<Out>(),)
+        format!("{} {}->{}", self.path, type_name::<In>(), type_name::<Out>(),)
     }
 }
 
 impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
     pub async fn send(&self, param: impl Borrow<Param>) -> Result<Output> {
-        request_object(Method::Get, self.full_url(), RestAPI::headers(), to_body(param)?).await
+        request_object(Method::Get, self.full_url(), self.api.headers(), to_body(param)?).await
     }
 
     pub async fn with_token(&self, param: impl Borrow<Param>, token: impl ToString) -> Result<Output> {
@@ -57,7 +58,7 @@ impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
     pub async fn with_headers(
         &self,
         param: impl Borrow<Param>,
-        headers: impl Into<HashMap<String, String>>,
+        headers: impl Into<BTreeMap<String, String>>,
     ) -> Result<Output> {
         let body = to_string(param.borrow())?;
 
@@ -68,7 +69,7 @@ impl<Param: Serialize, Output: DeserializeOwned> Request<Param, Output> {
 pub(crate) async fn request_object<T>(
     method: Method,
     url: impl ToString,
-    headers: HashMap<String, String>,
+    headers: BTreeMap<String, String>,
     body: Option<String>,
 ) -> Result<T>
 where
@@ -102,7 +103,7 @@ fn parse<T: DeserializeOwned>(json: impl ToString) -> Result<T> {
 async fn raw_request(
     method: Method,
     url: impl ToString,
-    headers: HashMap<String, String>,
+    headers: BTreeMap<String, String>,
     body: Option<String>,
 ) -> Result<Response> {
     let url = url.to_string();

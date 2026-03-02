@@ -1,15 +1,16 @@
 [package]
-name = "tests"
-version = "0.19.0"
-edition = "2024"
 authors = ["Vladas Zakrevksis <146100@gmail.com>"]
 description = "Network abstraction primitives"
-license = "MIT OR Apache-2.0"
+edition = "2024"
 homepage = "https://github.com/VladasZ/netrun"
+license = "MIT OR Apache-2.0"
+name = "tests"
 repository = "https://github.com/VladasZ/netrun"
+version = "0.19.0"
 
 [[bin]]
 name = "tests"
 
 
 [dependencies]
+# netrun = { workspace = true }
