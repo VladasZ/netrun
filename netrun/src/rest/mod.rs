@@ -38,6 +38,12 @@ mod test {
         use super::*;
         use crate::rest::get;
 
+        #[test]
+        fn size_of_none() {
+            const SIZE_OF_NONE: usize = size_of::<()>();
+            assert_eq!(SIZE_OF_NONE, 0);
+        }
+
         #[tokio::test]
         async fn test_rest() -> Result<()> {
             let users = USERS.await?;

@@ -1,7 +1,8 @@
 use std::fmt::{Display, Formatter};
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub enum Method {
+    #[default]
     Get,
     Post,
 }

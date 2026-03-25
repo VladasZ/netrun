@@ -51,6 +51,6 @@ impl RestAPI {
         &'static self,
         path: &'static str,
     ) -> Request<In, Out> {
-        Request::new(path, self)
+        Request::new(path, self, None)
     }
 }
