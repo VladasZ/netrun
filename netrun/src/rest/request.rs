@@ -31,7 +31,11 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
         }
     }
 
-    fn full_url(&self) -> String {
+    pub fn path(&self) -> &'static str {
+        self.path
+    }
+
+    pub fn full_url(&self) -> String {
         format!("{}/{}", self.api.base_url(), self.path)
     }
 

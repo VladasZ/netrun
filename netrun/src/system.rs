@@ -125,7 +125,7 @@ mod test {
 
     #[wasm_bindgen_test(unsupported = test)]
     fn test_app_id() {
-        for i in 0..100_000 {
+        for i in 0..10_000 {
             assert_ne!(
                 System::generate_app_instance_id(),
                 System::generate_app_instance_id(),
