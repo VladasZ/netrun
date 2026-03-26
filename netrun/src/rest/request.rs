@@ -1,6 +1,6 @@
 use std::{any::type_name, borrow::Borrow, collections::BTreeMap, marker::PhantomData};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use log::{debug, error};
 use reqwest::Client;
 use serde::{Serialize, de::DeserializeOwned};
@@ -27,13 +27,7 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
     pub(crate) const fn new(path: &'static str, api: &'static RestAPI, method: Option<Method>) -> Self {
         let method = match method {
             Some(method) => method,
-            None => {
-                if size_of::<In>() == 0 {
-                    Method::Get
-                } else {
-                    Method::Post
-                }
-            }
+            None => Method::Post,
         };
 
         Self {
@@ -63,7 +57,14 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
 
 impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
     pub async fn send(&self, param: impl Borrow<In>) -> Result<Out> {
-        request_object(self.method, self.full_url(), self.api.headers(), to_body(param)?).await
+        request_object(
+            self.api.client(),
+            self.method,
+            self.full_url(),
+            self.api.headers(),
+            to_body(param)?,
+        )
+        .await
     }
 
     pub async fn with_token(&self, param: impl Borrow<In>, token: impl ToString) -> Result<Out> {
@@ -75,22 +76,30 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
         param: impl Borrow<In>,
         headers: impl Into<BTreeMap<String, String>>,
     ) -> Result<Out> {
-        request_object(self.method, self.full_url(), headers.into(), to_body(param)?).await
+        request_object(
+            self.api.client(),
+            self.method,
+            self.full_url(),
+            headers.into(),
+            to_body(param)?,
+        )
+        .await
     }
 }
 
 pub(crate) async fn request_object<T>(
+    client: &Client,
     method: Method,
     url: impl ToString,
     headers: BTreeMap<String, String>,
-    body: Option<String>,
+    body: String,
 ) -> Result<T>
 where
     T: DeserializeOwned,
 {
     let url = url.to_string();
 
-    let response = raw_request(method, &url, headers, body).await?;
+    let response = raw_request(client, method, &url, headers, body).await?;
 
     if response.status == 404 {
         Err(anyhow!("Endpoint {url} not found. 404."))
@@ -114,19 +123,15 @@ fn parse<T: DeserializeOwned>(json: impl ToString) -> Result<T> {
 }
 
 async fn raw_request(
+    client: &Client,
     method: Method,
     url: impl ToString,
     headers: BTreeMap<String, String>,
-    body: Option<String>,
+    body: String,
 ) -> Result<Response> {
     let url = url.to_string();
-    let client = Client::new();
 
     debug!("Request: {url} - {method}. Body: {body:?}");
-
-    if method.get() && body.is_some() {
-        bail!("GET method can not have body");
-    }
 
     let mut request = match method {
         Method::Get => client.get(&url),
@@ -139,10 +144,7 @@ async fn raw_request(
         request = request.header(key, value);
     }
 
-    let request = match &body {
-        Some(body) => request.body(body.clone()),
-        None => request,
-    };
+    let request = if method.get() { request } else { request.body(body) };
 
     let response = request.send().await.map_err(|e| {
         error!("Failed to send request: {e:?}");
@@ -159,14 +161,8 @@ async fn raw_request(
     Ok(response)
 }
 
-fn to_body<Param: Serialize>(param: impl Borrow<Param>) -> Result<Option<String>> {
-    if size_of::<Param>() == 0 {
-        return Ok(None);
-    }
-
-    let body = to_string(param.borrow())?;
-
-    Ok(if body == "null" { None } else { Some(body) })
+fn to_body<Param: Serialize>(param: impl Borrow<Param>) -> Result<String> {
+    Ok(to_string(param.borrow())?)
 }
 
 #[cfg(target_arch = "wasm32")]

@@ -1,14 +1,16 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::OnceLock};
 
 use parking_lot::Mutex;
+use reqwest::Client;
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::rest::Request;
+use crate::rest::{Method, Request};
 
 #[derive(Debug)]
 pub struct RestAPI {
     base_url: &'static str,
     headers:  Mutex<BTreeMap<String, String>>,
+    client:   OnceLock<Client>,
 }
 
 impl RestAPI {
@@ -16,6 +18,7 @@ impl RestAPI {
         Self {
             base_url,
             headers: Mutex::new(BTreeMap::new()),
+            client: OnceLock::new(),
         }
     }
 }
@@ -23,6 +26,10 @@ impl RestAPI {
 impl RestAPI {
     pub fn base_url(&self) -> &str {
         self.base_url
+    }
+
+    pub(crate) fn client(&self) -> &Client {
+        self.client.get_or_init(Client::new)
     }
 
     pub fn headers(&self) -> BTreeMap<String, String> {
@@ -52,5 +59,12 @@ impl RestAPI {
         path: &'static str,
     ) -> Request<In, Out> {
         Request::new(path, self, None)
+    }
+
+    pub const fn get<In: Serialize, Out: DeserializeOwned>(
+        &'static self,
+        path: &'static str,
+    ) -> Request<In, Out> {
+        Request::new(path, self, Some(Method::Get))
     }
 }

@@ -28,7 +28,7 @@ mod test {
 
     static API: RestAPI = RestAPI::new("https://jsonplaceholder.typicode.com/");
 
-    static USERS: Request<(), Vec<User>> = API.request("users");
+    static USERS: Request<(), Vec<User>> = API.get("users");
 
     #[cfg(not_wasm)]
     mod not_wasm_test {

@@ -4,10 +4,17 @@ use anyhow::Result;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 
-use crate::rest::request::request_object;
+use crate::rest::{Method, request::request_object};
 
 pub async fn get<T: DeserializeOwned>(url: impl ToString) -> Result<T> {
-    request_object(super::Method::Get, url, BTreeMap::default(), None).await
+    request_object(
+        &Client::new(),
+        Method::Get,
+        url,
+        BTreeMap::default(),
+        "null".to_owned(),
+    )
+    .await
 }
 
 pub async fn download(url: impl ToString) -> Result<Vec<u8>> {
