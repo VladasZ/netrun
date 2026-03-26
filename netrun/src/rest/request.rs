@@ -67,13 +67,7 @@ impl<In: Serialize, Out: DeserializeOwned> Request<In, Out> {
     }
 
     pub async fn with_token(&self, param: impl Borrow<In>, token: impl ToString) -> Result<Out> {
-        request_object(
-            self.method,
-            self.full_url(),
-            [("token".to_string(), token.to_string())].into(),
-            to_body(param)?,
-        )
-        .await
+        self.with_headers(param, [("token".to_string(), token.to_string())]).await
     }
 
     pub async fn with_headers(
@@ -101,7 +95,7 @@ where
     if response.status == 404 {
         Err(anyhow!("Endpoint {url} not found. 404."))
     } else if response.status != 200 {
-        Err(anyhow!(response.body))
+        Err(anyhow!("[{}] {}", response.status, response.body))
     } else {
         Ok(parse(&response.body)?)
     }
