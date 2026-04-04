@@ -1,96 +1,97 @@
-use anyhow::Result;
+use std::{env::var, time::Duration};
+
+use anyhow::{Context, Result};
 use infisical::{AuthMethod, Client, secrets::GetSecretRequest};
+use tokio::sync::{OnceCell, watch};
 
-pub const US_INFISICAL_URL: &str = "https://app.infisical.com";
-pub const EU_INFISICAL_URL: &str = "https://eu.infisical.com";
+const EU_INFISICAL_URL: &str = "https://eu.infisical.com";
 
-pub struct SecretsManager {
-    client:      Client,
-    project_id:  String,
-    environment: String,
+const REQUIRED_VARS: &str = "
+  Required environment variables for Infisical:
+    INFISICAL_CLIENT_ID      - Universal auth client ID
+    INFISICAL_CLIENT_SECRET  - Universal auth client secret
+    INFISICAL_PROJECT_ID     - Infisical project ID
+    INFISICAL_ENVIRONMENT    - Environment name (e.g. dev, staging, prod)
+";
+
+fn require_var(name: &'static str) -> Result<String> {
+    var(name).with_context(|| format!("Missing env var: {name}{REQUIRED_VARS}"))
 }
 
-impl SecretsManager {
-    pub async fn new(
-        client_id: impl Into<String>,
-        client_secret: impl Into<String>,
-        project_id: impl Into<String>,
-        environment: impl Into<String>,
-    ) -> Result<Self> {
-        let mut client = Client::builder().base_url(EU_INFISICAL_URL).build().await?;
+static CLIENT: OnceCell<Client> = OnceCell::const_new();
 
-        let auth_method = AuthMethod::new_universal_auth(client_id, client_secret);
+async fn client() -> Result<&'static Client> {
+    CLIENT
+        .get_or_try_init(|| async {
+            let client_id = require_var("INFISICAL_CLIENT_ID")?;
+            let client_secret = require_var("INFISICAL_CLIENT_SECRET")?;
 
-        client.login(auth_method).await?;
+            let mut client = Client::builder().base_url(EU_INFISICAL_URL).build().await?;
+            client.login(AuthMethod::new_universal_auth(client_id, client_secret)).await?;
 
-        Ok(Self {
-            client,
-            project_id: project_id.into(),
-            environment: environment.into(),
+            Ok(client)
         })
+        .await
+}
+
+pub struct Secret {
+    key: &'static str,
+}
+
+impl Secret {
+    pub const fn new(key: &'static str) -> Self {
+        Self { key }
     }
 
-    pub async fn get(&self, key: impl Into<String>) -> Result<String> {
-        let request = GetSecretRequest::builder(key, &self.project_id, &self.environment).build();
+    pub async fn get(&self) -> Result<String> {
+        let project_id = require_var("INFISICAL_PROJECT_ID")?;
+        let environment = require_var("INFISICAL_ENVIRONMENT")?;
 
-        let secret = self.client.secrets().get(request).await?;
+        let request = GetSecretRequest::builder(self.key, &project_id, &environment).build();
+        let secret = client().await?.secrets().get(request).await?;
 
         Ok(secret.secret_value)
+    }
+
+    pub async fn watch(&'static self) -> Result<watch::Receiver<String>> {
+        self.watch_interval(Duration::from_secs(300)).await
+    }
+
+    pub async fn watch_interval(&'static self, interval: Duration) -> Result<watch::Receiver<String>> {
+        let initial = self.get().await?;
+        let (tx, rx) = watch::channel(initial);
+
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(interval).await;
+                match self.get().await {
+                    Ok(value) => {
+                        if *tx.borrow() != value {
+                            let _ = tx.send(value);
+                        }
+                    }
+                    Err(e) => log::error!("Failed to poll secret {}: {e}", self.key),
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::env::var;
+    use anyhow::Result;
 
-    use anyhow::{Context, Result};
-    use tokio::sync::OnceCell;
+    use crate::secret::Secret;
 
-    use crate::secret::SecretsManager;
-
-    async fn secrets() -> Result<&'static SecretsManager> {
-        static SECRETS: OnceCell<SecretsManager> = OnceCell::const_new();
-
-        SECRETS
-            .get_or_try_init(|| async {
-                let client_secret = var("INFISICAL_NETRUN").context("INFISICAL_NETRUN")?;
-
-                let manager = SecretsManager::new(
-                    "b51b4908-b9f9-4a43-ac20-796908c9f80f",
-                    client_secret,
-                    "ba83e490-eb77-4376-a23a-9348a53cd381",
-                    "dev",
-                )
-                .await
-                .context("Secrets Manager init")?;
-
-                Ok(manager)
-            })
-            .await
-    }
+    static TEST_SECRET: Secret = Secret::new("TEST_SECRET");
 
     #[tokio::test]
     async fn test_secret() -> Result<()> {
-        dotenvy::dotenv()?;
+        dotenvy::dotenv().ok();
 
-        let manager = SecretsManager::new(
-            "b51b4908-b9f9-4a43-ac20-796908c9f80f",
-            var("INFISICAL_NETRUN")?,
-            "ba83e490-eb77-4376-a23a-9348a53cd381",
-            "dev",
-        )
-        .await?;
-
-        assert_eq!(manager.get("TEST_SECRET").await?, "plati");
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_global_managersecret() -> Result<()> {
-        dotenvy::dotenv()?;
-
-        assert_eq!(secrets().await?.get("TEST_SECRET").await?, "plati");
+        assert_eq!(TEST_SECRET.get().await?, "plati");
 
         Ok(())
     }
