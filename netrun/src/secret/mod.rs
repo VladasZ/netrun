@@ -4,10 +4,9 @@ use anyhow::{Context, Result};
 use infisical::{AuthMethod, Client, secrets::GetSecretRequest};
 use tokio::sync::{OnceCell, watch};
 
-const EU_INFISICAL_URL: &str = "https://eu.infisical.com";
-
 const REQUIRED_VARS: &str = "
   Required environment variables for Infisical:
+    INFISICAL_URL            - Infisical instance URL
     INFISICAL_CLIENT_ID      - Universal auth client ID
     INFISICAL_CLIENT_SECRET  - Universal auth client secret
     INFISICAL_PROJECT_ID     - Infisical project ID
@@ -23,10 +22,11 @@ static CLIENT: OnceCell<Client> = OnceCell::const_new();
 async fn client() -> Result<&'static Client> {
     CLIENT
         .get_or_try_init(|| async {
+            let url = require_var("INFISICAL_URL")?;
             let client_id = require_var("INFISICAL_CLIENT_ID")?;
             let client_secret = require_var("INFISICAL_CLIENT_SECRET")?;
 
-            let mut client = Client::builder().base_url(EU_INFISICAL_URL).build().await?;
+            let mut client = Client::builder().base_url(&url).build().await?;
             client.login(AuthMethod::new_universal_auth(client_id, client_secret)).await?;
 
             Ok(client)
