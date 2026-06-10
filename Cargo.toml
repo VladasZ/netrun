@@ -8,7 +8,7 @@ members = ["netrun", "tests"]
 
 [workspace.dependencies]
 anyhow = "1.0"
-hreads = "0.13"
+hreads = "0.14"
 log = "0.4"
 pretty_assertions = "1.4"
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
